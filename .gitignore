@@ -21,6 +21,13 @@ log.txt
 log2.txt
 log3.txt
 
+# 各类测试输出（探针/回归产生的日志）
+*.err.txt
+live*.txt
+pub*.txt
+dom*.txt
+log*.txt
+
 # 说明：publish/ 是"可直接上传的成品"（由 tools/make_publish.py 生成）
 # 如果你要用 GitHub Pages，就需要它 → 所以**不忽略**
 
