@@ -22,10 +22,18 @@ echo.
 echo ============================================================
 pause
 
+rem 优先用系统里的 python，找不到就用打包自带的（和 启动游戏.bat 一致的兜底）
+set PY=python
+where python >nul 2>nul
+if errorlevel 1 (
+  set PY=C:\Users\HP\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe
+)
+
 echo.
 echo [1/4] 重新生成 publish 成品...
-python tools\make_publish.py
+"%PY%" tools\make_publish.py
 if errorlevel 1 (
+  echo.
   echo   [失败] 生成成品出错，后面不做了。把窗口内容截图发给助手。
   pause >nul & exit /b 1
 )
