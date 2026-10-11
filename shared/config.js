@@ -459,6 +459,10 @@
   G.ACHV_ICONS = ['eye', 'egg', 'cup', 'apple', 'skull', 'key'];
   G.ACHV_TIER_ICONS = { 1: 'egg', 2: 'cup', 3: 'eye', 4: 'apple', 5: 'skull', 6: 'key', 7: 'key' };
 
+  /* 「累计合成出 N 个某角色」这一系列的门槛（键=0 起的阶索引；只列出的阶才有，
+   * 2026-10-11 用户要求加）。越高阶越难合，所以门槛递减。 */
+  G.ACHV_CUM_THRESHOLDS = { 1: 30, 2: 20, 3: 12, 4: 8, 5: 5, 6: 3, 7: 3 };
+
   G.ACHIEVEMENTS = (function () {
     var tierList = [];
     /* 角色类：合成出第 2~8 阶各一条（第 1 阶不会作为合成结果出现） */
@@ -473,6 +477,19 @@
           icon: G.ACHV_TIER_ICONS[idx] || 'eye',
           test: function (s) { return s.tierMerges[idx] >= 1; }
         });
+        /* 紧随其后再加一条"累计合成出 N 个"（用户 2026-10-11 要求；门槛见上表）。
+         * 名字用"囤积{角色名}"，说明里写清数量，右侧显示 x/N 进度。 */
+        var cumN = G.ACHV_CUM_THRESHOLDS[idx];
+        if (cumN) {
+          tierList.push({
+            id: 'cum_' + idx,
+            name: '囤积{' + idx + '}',
+            desc: '累计合成出 ' + cumN + ' 个{' + idx + '}',
+            icon: G.ACHV_TIER_ICONS[idx] || 'eye',
+            test: function (s) { return s.tierMerges[idx] >= cumN; },
+            prog: function (s) { return Math.min(s.tierMerges[idx], cumN) + '/' + cumN; }
+          });
+        }
       })(t);
     }
     var mile = [
@@ -503,7 +520,12 @@
         prog: function (s) { return Math.min(s.games, 10) + '/10'; } },
       { id: 'alice5', name: '收藏家', desc: '累计合成出 5 次最高阶角色', icon: 'key',
         test: function (s) { return s.aliceCount >= 5; },
-        prog: function (s) { return Math.min(s.aliceCount, 5) + '/5'; } }
+        prog: function (s) { return Math.min(s.aliceCount, 5) + '/5'; } },
+      /* 2026-10-11 追加：用上"命名版本"和"单局收集"两条数据 */
+      { id: 'hell_world', name: '另一个世界', desc: '在地狱版玩一局', icon: 'skull',
+        test: function (s) { return s.hellGames >= 1; } },
+      { id: 'all_tiers', name: '全图鉴', desc: '单局内把 7 个角色都合出来一次', icon: 'key',
+        test: function (s) { return s.allTiersInOneGame >= 1; } }
     ];
     /* 顺序：初次合成 → 角色一路合成上去 → 里程碑 */
     return [mile[0]].concat(tierList, mile.slice(1));

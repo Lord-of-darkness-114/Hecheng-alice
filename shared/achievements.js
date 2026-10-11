@@ -27,6 +27,8 @@
       maxTier: 0,       // 到达过的最高阶（0 起索引）
       maxCombo: 0,      // 最高连击
       aliceCount: 0,    // 合出最高阶角色的次数
+      hellGames: 0,     // 在地狱版开局的次数（「另一个世界」）
+      allTiersInOneGame: 0,   // 有没有过"单局集齐 7 个角色"（0/1，「全图鉴」）
       tierMerges: [0, 0, 0, 0, 0, 0, 0, 0]   // 合成出第 N 阶（0 起索引）的次数
     };
   }
@@ -132,7 +134,17 @@
     /* ---------------- 事件入口（都由 game.js 调） ---------------- */
     beginGame: function () {
       this.stats.games++;
+      if (G.nameVersion === 'hell') this.stats.hellGames++;   // 「另一个世界」
       return this.check();
+    },
+
+    /* 单局内集齐全部角色时由 game.js 调（「全图鉴」）。只会在第一次时返回成就。 */
+    noteAllTiers: function () {
+      if (this.stats.allTiersInOneGame) return [];
+      this.stats.allTiersInOneGame = 1;
+      var out = this.check();
+      this.save();
+      return out;
     },
 
     noteDrop: function () {

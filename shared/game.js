@@ -52,6 +52,7 @@
     this.hold = { tier: this._rollTier() };
     this.holdX = G.DESIGN.w / 2;
     this._dropCd = 0;
+    this._tierSet = {};          // 本局合出过哪些阶（「全图鉴」用，2026-10-11）
     return this;
   };
 
@@ -275,6 +276,14 @@
     this.render.flash = Math.min(0.5, this.render.flash + 0.18);
     G.Sound.playMerge(tier + 1);
     if (G.Achv) this._achv(G.Achv.noteMerge(tier + 1, this.combo));   // 统计 + 查成就
+    /* 单局内把 7 个角色都合出来一次 → 「全图鉴」（2026-10-11 加） */
+    if (G.Achv) {
+      if (!this._tierSet) this._tierSet = {};
+      this._tierSet[tier + 1] = 1;
+      var seenTiers = 0, tk;
+      for (tk in this._tierSet) { if (this._tierSet[tk]) seenTiers++; }
+      if (seenTiers >= G.THEME.tiers.length - 1) this._achv(G.Achv.noteAllTiers());
+    }
     this.ad.vibrate(12);
     return nb;
   };
@@ -677,6 +686,31 @@
           && Math.abs((UI.entryW / UI.entryH) - (168 / 40)) < 0.05;
       })(), G.ACHV_UI.entryW + 'x' + G.ACHV_UI.entryH
         + '（' + ((G.ACHV_UI.entryW * G.ACHV_UI.entryH) / (168 * 40)).toFixed(2) + ' 倍）');
+
+    // 7j) 「累计合成出 N 个某角色」系列 + 两条新成就（2026-10-11 追加）
+    var cumOk = true, cumDetail = '';
+    for (var ci = 1; ci < G.THEME.tiers.length; ci++) {
+      var need = G.ACHV_CUM_THRESHOLDS[ci];
+      var cdef = G.Achv.byId('cum_' + ci);
+      if (!cdef || !need) { cumOk = false; cumDetail = '缺 cum_' + ci; break; }
+      var st2 = G.Achv.blankStats();
+      st2.tierMerges[ci] = need;
+      var marked = {}; marked['tier_' + ci] = 1;      // 把单条成就挡掉，只看累计那条
+      if (G.Achv.newlyUnlocked(st2, marked).indexOf('cum_' + ci) < 0) {
+        cumOk = false; cumDetail = 'cum_' + ci + '（门槛 ' + need + '）没解锁'; break;
+      }
+      st2.tierMerges[ci] = need - 1;                   // 差一个就不该解锁
+      if (G.Achv.newlyUnlocked(st2, marked).indexOf('cum_' + ci) >= 0) {
+        cumOk = false; cumDetail = 'cum_' + ci + ' 在 ' + (need - 1) + ' 个时就解锁了'; break;
+      }
+    }
+    ok('每个角色都有"累计合成出 N 个"成就、门槛也准确', cumOk, cumDetail);
+    var sHell = G.Achv.blankStats(); sHell.hellGames = 1;
+    ok('在地狱版玩一局会解锁「另一个世界」',
+      G.Achv.newlyUnlocked(sHell, {}).indexOf('hell_world') >= 0, '');
+    var sAll = G.Achv.blankStats(); sAll.allTiersInOneGame = 1;
+    ok('单局集齐 7 个角色会解锁「全图鉴」',
+      G.Achv.newlyUnlocked(sAll, {}).indexOf('all_tiers') >= 0, '');
 
     // 7d) BGM：两个命名版本各一首，版本名写错要能回退
     ok('两个版本各有自己的 BGM 文件',
