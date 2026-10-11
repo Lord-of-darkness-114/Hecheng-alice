@@ -27,7 +27,17 @@
       maxTier: 0,       // 到达过的最高阶（0 起索引）
       maxCombo: 0,      // 最高连击
       aliceCount: 0,    // 合出最高阶角色的次数
-      tierMerges: [0, 0, 0, 0, 0, 0, 0, 0]   // 合成出第 N 阶（0 起索引）的次数
+      hellGames: 0,     // 在地狱版开局的次数（「另一个世界」）
+      hellMerges: 0,    // 在地狱版合成过的次数（地狱版那条「初次合成」）
+      allTiersInOneGame: 0,   // 有没有过"单局集齐 7 个角色"（0/1，「全图鉴」）
+      tierMerges: [0, 0, 0, 0, 0, 0, 0, 0],        // 合成出第 N 阶（0 起索引）的次数（跨局累计，不分版本）
+      /* 下面这些按**命名版本**分开记（用户 2026-10-11 要求"两套各算各的"）：
+       *   tierMergesNormal/Hell = 该版本下累计合成出第 N 阶的次数（"第一次合成出 N 阶"用）
+       *   gameTierNormal/Hell   = 该版本下**单局最高**合成出第 N 阶的次数（"一局内 N 个"用） */
+      tierMergesNormal: [0, 0, 0, 0, 0, 0, 0, 0],
+      tierMergesHell: [0, 0, 0, 0, 0, 0, 0, 0],
+      gameTierNormal: [0, 0, 0, 0, 0, 0, 0, 0],
+      gameTierHell: [0, 0, 0, 0, 0, 0, 0, 0]
     };
   }
 
@@ -46,11 +56,13 @@
     var base = blankStats();
     var s = (o.stats && typeof o.stats === 'object') ? o.stats : {};
     for (var k in base) {
-      if (k === 'tierMerges') {
-        var tm = s.tierMerges;
-        for (var i = 0; i < base.tierMerges.length; i++) {
-          var v = tm ? tm[i] : 0;
-          base.tierMerges[i] = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
+      if (Object.prototype.toString.call(base[k]) === '[object Array]') {
+        /* 任何"数字数组"字段（tierMerges / gameTierNormal / gameTierHell…）逐个校验：
+         * 缺失或非法一律补 0 —— 老存档（没这些字段）也能平滑升级 */
+        var src = s[k];
+        for (var i = 0; i < base[k].length; i++) {
+          var v = src ? src[i] : 0;
+          base[k][i] = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
         }
       } else if (typeof s[k] === 'number' && isFinite(s[k]) && s[k] > 0) {
         base[k] = s[k];
@@ -102,22 +114,27 @@
       return null;
     },
 
-    /* 纯逻辑：找出"还没解锁、条件已满足"的成就 id（不写存档，自测可随便调） */
-    newlyUnlocked: function (stats, unlocked) {
+    /* 纯逻辑：找出"还没解锁、条件已满足"的成就 id（不写存档，自测可随便调）。
+     * version 省略时用当前命名版本；带 ver 标记的成就只在该版本里判定
+     * （正常版 7 条单局累计 + 初次合成 / 地狱版另一套，两套各算各的）。 */
+    newlyUnlocked: function (stats, unlocked, version) {
       var out = [];
       var l = this.list();
       var u = unlocked || {};
+      var v = version || G.nameVersion;
       for (var i = 0; i < l.length; i++) {
         var a = l[i];
         if (!a || !a.id || u[a.id]) continue;
+        if (a.ver && a.ver !== v) continue;        // 版本限定
         try { if (a.test(stats)) out.push(a.id); } catch (e) { /* 单条坏了不影响其它 */ }
       }
       return out;
     },
 
     /* 正式解锁：写进 unlocked + 存盘，返回新解锁的成就定义（给上层弹提示） */
-    check: function () {
-      var ids = this.newlyUnlocked(this.stats, this.unlocked);
+    check: function (version) {
+      var v = version || G.nameVersion;
+      var ids = this.newlyUnlocked(this.stats, this.unlocked, v);
       var out = [];
       var now = (root.Date && root.Date.now && root.Date.now()) || 0;
       for (var i = 0; i < ids.length; i++) {
@@ -132,7 +149,17 @@
     /* ---------------- 事件入口（都由 game.js 调） ---------------- */
     beginGame: function () {
       this.stats.games++;
+      if (G.nameVersion === 'hell') this.stats.hellGames++;   // 「另一个世界」
       return this.check();
+    },
+
+    /* 单局内集齐全部角色时由 game.js 调（「全图鉴」）。只会在第一次时返回成就。 */
+    noteAllTiers: function () {
+      if (this.stats.allTiersInOneGame) return [];
+      this.stats.allTiersInOneGame = 1;
+      var out = this.check();
+      this.save();
+      return out;
     },
 
     noteDrop: function () {
@@ -151,6 +178,23 @@
       if (newTier === G.THEME.tiers.length - 1) s.aliceCount++;
       if (combo && combo > s.maxCombo) s.maxCombo = combo;
       return this.check();
+    },
+
+    /* 每次合成时由 game.js 调：告诉它"本局这个阶已经合出几个了"（用户 2026-10-11 改版）。
+     * · 按命名版本分开记（normal / hell 各一套，互不解锁）
+     * · 记的是**单局最高**次数（跨局取 max），所以条件就是"某一局内做到过 N 个"
+     * · 顺便累计地狱版合成次数（给地狱版那条「初次合成」用） */
+    noteGameTier: function (version, tier, countInGame) {
+      var v = (version === 'hell') ? 'hell' : 'normal';
+      var arr = (v === 'hell') ? this.stats.gameTierHell : this.stats.gameTierNormal;
+      var life = (v === 'hell') ? this.stats.tierMergesHell : this.stats.tierMergesNormal;
+      var ok = (typeof tier === 'number' && tier >= 0 && tier < arr.length);
+      if (ok && typeof countInGame === 'number' && countInGame > arr[tier]) {
+        arr[tier] = countInGame;                 // 单局最高次数
+      }
+      if (ok && life) life[tier]++;              // 该版本的累计次数（"第一次合成出 N 阶"用）
+      if (v === 'hell') this.stats.hellMerges++;
+      return this.check(v);
     },
 
     noteGameOver: function (score) {
@@ -183,8 +227,10 @@
         try { prog = a.prog ? a.prog(this.stats) : ''; } catch (e) { prog = ''; }
         out.push({
           id: a.id,
-          name: fill(a.name),
-          desc: fill(a.desc),
+          name: fill(a.name, a.ver),        // 带 ver 的成就固定用那个版本的角色名
+          desc: fill(a.desc, a.ver),
+          icon: a.icon || 'eye',            // 图标类型（画法见 render.js 的 _achvIcon）
+          ver: a.ver || '',
           prog: prog,
           unlocked: !!this.unlocked[a.id]
         });

@@ -433,13 +433,82 @@
     return (set && set.names) || [];
   };
 
-  /* 把文案里的 {0}~{7} 换成当前版本的角色名 */
-  G.achvFill = function (text) {
-    var names = G.achvNames();
+  /* 把文案里的 {0}~{7} 换成角色名。
+   * version 省略时用当前命名版本；成就自带 ver（如地狱版专属成就）就传它 ——
+   * 这样地狱版成就的文案永远用**地狱版**角色名，不受当前版本影响。
+   * 另外 G.ACHV_CHAR_NAMES 能覆盖**成就文案里**的角色名（游戏里不变）。 */
+  G.achvFill = function (text, version) {
+    var key = version || G.nameVersion;
+    var set = G.NAME_SETS[key] || G.NAME_SETS[G.NAME_VERSION_DEFAULT];
+    var names = (set && set.names) || [];
+    /* 覆盖表支持两种写法：按版本分 {normal:{6:'x'}, hell:{6:'y'}} 或全局扁平 {6:'x'} */
+    var ovAll = G.ACHV_CHAR_NAMES || {};
+    var ov = ovAll[key] || ovAll[G.NAME_VERSION_DEFAULT] || ovAll;
     return String(text).replace(/\{(\d)\}/g, function (m, d) {
-      var n = names[parseInt(d, 10)];
+      var i = parseInt(d, 10);
+      if (ov && typeof ov[i] === 'string') return ov[i];
+      var n = names[i];
       return n == null ? m : n;
     });
+  };
+
+  /* 成就文案里的角色名覆盖 —— **按命名版本分开**（用户 2026-10-11 要求）：
+   *   · 正常版成就里，第 6 阶叫"莉耶芙"
+   *   · 地狱版成就里，第 6 阶叫"玛丽苏"
+   * （游戏里的角色名不受影响，改的是 NAME_SETS） */
+  G.ACHV_CHAR_NAMES = {
+    normal: { 6: '莉耶芙' },
+    hell: { 6: '玛丽苏' }
+  };
+
+  /* 角色类成就的名字覆盖（用户指定；没列到的用默认"合成出{角色名}"）。
+   * ⚠️ 键是**0 起的阶索引**：1=古兹 2=维多利亚 3=伊丽莎白 4=多萝茜 5=蕾克 6=库嘻嘻 7=爱丽丝。
+   * ⚠️ 必须定义在 G.ACHIEVEMENTS **之前**：下面那个 IIFE 会立刻读它。 */
+  G.ACHV_TIER_NAMES = {
+    1: '下金蛋的鸟',
+    2: '皇家红茶',
+    3: '魂之贵夫人',
+    4: '教师节快乐',
+    5: '怨头帽耋',
+    6: '腹击',
+    7: '爱丽丝爱丽丝爱丽丝爱丽丝爱丽丝&&*……%#@！#￥*'
+  };
+
+  /* 每条角色成就用哪个图标（画法见 render.js 的 _achvIcon）。
+   * 目前支持：eye / egg / cup / apple / skull / key。回归测试会检查别写错。 */
+  G.ACHV_ICONS = ['eye', 'egg', 'cup', 'apple', 'skull', 'key'];
+  G.ACHV_TIER_ICONS = { 1: 'egg', 2: 'cup', 3: 'eye', 4: 'apple', 5: 'skull', 6: 'key', 7: 'key' };
+
+  /* 「**一局内**合成出 N 个某角色」这一系列（2026-10-11 用户改版：
+   * 原来跨局累计 → 现在**单局内**计数；并且**按命名版本分流**）：
+   *   · 门槛（键=0 起的阶索引，越高阶越难合所以递减）
+   *   · 名字（用户指定）
+   *   · ⚠️ 正常版一套（`cum_N`）+ 地狱版一套（`hell_cum_N`），各算各的、互不解锁 */
+  G.ACHV_CUM_THRESHOLDS = { 1: 40, 2: 25, 3: 20, 4: 15, 5: 12, 6: 7, 7: 5 };
+  G.ACHV_CUM_NAMES = {
+    1: '子孙满堂',
+    2: '国王来了',
+    3: 'AAAAA戒指批发',
+    4: '三人行必有我师',
+    5: '我砍我砍我砍',
+    6: '莉耶芙还是玛丽苏还是玛丽安！？',
+    7: '蠕动潜行而来'
+  };
+  /* 地狱版那套 —— 用户说名字稍后给，先用**占位名**（给名字就替换这里） */
+  G.ACHV_HELL_CUM_NAMES = {
+    1: 'kfc全家桶', 2: 'AAAAA杯子批发', 3: '释然了', 4: '触手养殖场',
+    5: '至少加起来远超常人寿命不是吗？', 6: '库嘻嘻', 7: '蠕动潜行而来'
+  };
+  G.ACHV_HELL_FIRST_NAME = '（地狱·待命名·初次合成）';
+  /* 地狱版的"第一次合成出第 N 阶"（镜像正常版那 7 条）—— 用户 2026-10-11 给定，低阶→高阶 */
+  G.ACHV_HELL_TIER_NAMES = {
+    1: '吮指原味鸡',
+    2: '杯子',
+    3: 'zxf老师',
+    4: '肚包肉在地上',
+    5: '永葆青春',
+    6: '库嘻嘻',
+    7: '%…*%@￥%……@'
   };
 
   G.ACHIEVEMENTS = (function () {
@@ -447,54 +516,135 @@
     /* 角色类：合成出第 2~8 阶各一条（第 1 阶不会作为合成结果出现） */
     for (var t = 1; t < 8; t++) {
       (function (idx) {
+        var icon = G.ACHV_TIER_ICONS[idx] || 'eye';
+        var cumN = G.ACHV_CUM_THRESHOLDS[idx];
+        /* ① 第一次合成出这个角色 —— **只有正常版能拿**（数据也用正常版专用的）
+         *    地狱版有自己的一条（下面 ①'），名字待用户给 */
         tierList.push({
           id: 'tier_' + idx,
-          name: '合成出{' + idx + '}',
+          ver: 'normal',
+          name: G.ACHV_TIER_NAMES[idx] || ('合成出{' + idx + '}'),
           desc: '把两个{' + (idx - 1) + '}合成在一起',
-          test: function (s) { return s.tierMerges[idx] >= 1; }
+          icon: icon,
+          test: function (s) { return s.tierMergesNormal[idx] >= 1; }
         });
+        /* ①' 地狱版对应的那条（同一图标，说明用地狱版角色名） */
+        tierList.push({
+          id: 'hell_tier_' + idx,
+          ver: 'hell',
+          name: G.ACHV_HELL_TIER_NAMES[idx] || ('（地狱·待命名·首合' + idx + '阶）'),
+          desc: '在地狱版第一次合成出{' + idx + '}',
+          icon: icon,
+          test: function (s) { return s.tierMergesHell[idx] >= 1; }
+        });
+        /* ② 一局内合成出 N 个（**只在正常版能拿**） */
+        if (cumN) {
+          tierList.push({
+            id: 'cum_' + idx,
+            ver: 'normal',
+            name: G.ACHV_CUM_NAMES[idx] || ('量产{' + idx + '}'),
+            desc: '一局内合成出 ' + cumN + ' 个{' + idx + '}',
+            icon: icon,
+            test: function (s) { return s.gameTierNormal[idx] >= cumN; },
+            prog: function (s) { return Math.min(s.gameTierNormal[idx], cumN) + '/' + cumN; }
+          });
+          /* ③ 地狱版专属的同类成就（名字待用户给，先用占位；数据也各算各的） */
+          tierList.push({
+            id: 'hell_cum_' + idx,
+            ver: 'hell',
+            name: G.ACHV_HELL_CUM_NAMES[idx] || ('（地狱·待命名' + idx + '阶）'),
+            desc: '一局内合成出 ' + cumN + ' 个{' + idx + '}',
+            icon: icon,
+            test: function (s) { return s.gameTierHell[idx] >= cumN; },
+            prog: function (s) { return Math.min(s.gameTierHell[idx], cumN) + '/' + cumN; }
+          });
+        }
       })(t);
     }
     var mile = [
-      { id: 'first_merge', name: '初次合成', desc: '完成第一次合成',
+      /* 「初次合成」+ 上面那 7 条单局累计：**只有正常版能拿**（用户 2026-10-11 要求） */
+      { id: 'first_merge', name: '初次合成', desc: '完成第一次合成', icon: 'eye', ver: 'normal',
         test: function (s) { return s.merges >= 1; } },
-      { id: 'first_game', name: '第一局', desc: '玩完一局（无论输赢）',
+      /* 地狱版单独一条对应的（名字待用户给） */
+      { id: 'hell_first_merge', ver: 'hell',
+        name: G.ACHV_HELL_FIRST_NAME || '（地狱·待命名·初次合成）',
+        desc: '在地狱版完成第一次合成', icon: 'eye',
+        test: function (s) { return s.hellMerges >= 1; } },
+      { id: 'first_game', name: '第一局', desc: '玩完一局（无论输赢）', icon: 'key',
         test: function (s) { return s.games >= 1; } },
-      { id: 'combo3', name: '连锁反应', desc: '一次连击达到 3 连',
+      { id: 'combo3', name: '连锁反应', desc: '一次连击达到 3 连', icon: 'skull',
         test: function (s) { return s.maxCombo >= 3; },
         prog: function (s) { return Math.min(s.maxCombo, 3) + '/3'; } },
-      { id: 'combo6', name: '停不下来', desc: '一次连击达到 6 连',
+      { id: 'combo6', name: '停不下来', desc: '一次连击达到 6 连', icon: 'skull',
         test: function (s) { return s.maxCombo >= 6; },
         prog: function (s) { return Math.min(s.maxCombo, 6) + '/6'; } },
-      { id: 'score1000', name: '千分达成', desc: '单局拿到 1000 分',
+      { id: 'score1000', name: '千分达成', desc: '单局拿到 1000 分', icon: 'cup',
         test: function (s) { return s.best >= 1000; },
         prog: function (s) { return Math.min(s.best, 1000) + '/1000'; } },
-      { id: 'score5000', name: '五千分', desc: '单局拿到 5000 分',
+      { id: 'score5000', name: '五千分', desc: '单局拿到 5000 分', icon: 'skull',
         test: function (s) { return s.best >= 5000; },
         prog: function (s) { return Math.min(s.best, 5000) + '/5000'; } },
-      { id: 'drops100', name: '手熟', desc: '累计投放 100 次',
+      { id: 'drops100', name: '手熟', desc: '累计投放 100 次', icon: 'egg',
         test: function (s) { return s.drops >= 100; },
         prog: function (s) { return Math.min(s.drops, 100) + '/100'; } },
-      { id: 'merges100', name: '熟能生巧', desc: '累计合成 100 次',
+      { id: 'merges100', name: '熟能生巧', desc: '累计合成 100 次', icon: 'egg',
         test: function (s) { return s.merges >= 100; },
         prog: function (s) { return Math.min(s.merges, 100) + '/100'; } },
-      { id: 'games10', name: '常客', desc: '累计游玩 10 局',
+      { id: 'games10', name: '常客', desc: '累计游玩 10 局', icon: 'apple',
         test: function (s) { return s.games >= 10; },
         prog: function (s) { return Math.min(s.games, 10) + '/10'; } },
-      { id: 'alice5', name: '收藏家', desc: '累计合成出 5 次最高阶角色',
+      { id: 'alice5', name: '收藏家', desc: '累计合成出 5 次最高阶角色', icon: 'key',
         test: function (s) { return s.aliceCount >= 5; },
-        prog: function (s) { return Math.min(s.aliceCount, 5) + '/5'; } }
+        prog: function (s) { return Math.min(s.aliceCount, 5) + '/5'; } },
+      /* 2026-10-11 追加：用上"命名版本"和"单局收集"两条数据 */
+      { id: 'hell_world', name: '另一个世界', desc: '在地狱版玩一局', icon: 'skull',
+        test: function (s) { return s.hellGames >= 1; } },
+      { id: 'all_tiers', name: '全图鉴', desc: '单局内把 7 个角色都合出来一次', icon: 'key',
+        test: function (s) { return s.allTiersInOneGame >= 1; } }
     ];
     /* 顺序：初次合成 → 角色一路合成上去 → 里程碑 */
     return [mile[0]].concat(tierList, mile.slice(1));
   })();
 
+  /* 成就系统的配色：**惨白为主 + 一点血红**，参考背景里的狮子/独角兽/骷髅 */
+  G.ACHV_COLORS = {
+    bone: '#e6dfc8',                          // 惨白（骨白）
+    boneBright: '#f4eeda',
+    boneDim: 'rgba(214,206,182,.32)',
+    blood: '#95202a',                         // 暗红
+    bloodBright: '#c2402f',
+    rowOn: 'rgba(146,32,42,.20)',             // 已解锁行底（带血色）
+    rowOff: 'rgba(0,0,0,.42)',
+    borderOn: 'rgba(230,223,200,.70)',
+    borderOff: 'rgba(170,162,140,.24)'
+  };
+
   /* 成就面板的排版参数 */
   G.ACHV_UI = {
     panelW: 640, top: 150, bottom: 130,
-    rowH: 64, rowGap: 8, titleH: 92,
+    rowH: 64, rowGap: 8,
+    icon: 30,             // 图标直径（逻辑像素）
     scrollStep: 1,        // 手指移动 1px = 列表滚 1px（直接拖动的手感）
-    toastMs: 3.4          // 解锁提示条停留秒数
+    toastMs: 3.4,         // 解锁提示条停留秒数
+    /* 开始界面入口：长宽比不变、面积约原来的 2 倍（168×40 → 238×57），位置挪到
+     * "开始游戏"按钮正下方（按钮 y 752~870，取 900 留 30px 间距） */
+    entryW: 238, entryH: 57, entryY: 900
+  };
+
+  /* 合成时的"角色喊话"字幕样式。
+   * ★ 2026-10-11 用户要求：**地狱版**改成"红底 + 白色描边的草书"；
+   *   正常版保持原来的金色描边字。
+   *   草书字体 = 网页里嵌入的 BSLabel（柳建毛草子集，见 index.html 的 @font-face），
+   *   ⚠️ 子集里必须包含所有角色名用字，否则会回退成系统字体（见交接文档"草书字体"一节）。 */
+  G.BANNER = {
+    t: 1.3,                                        // 停留秒数
+    y: 0.34,                                       // 纵向位置（屏幕高度比例）
+    hellFont: '700 46px BSLabel, STXingkai, STLiti, LiSu, KaiTi, serif',
+    hellBg: 'rgba(146,26,34,.90)',                 // 红底
+    hellBgEdge: 'rgba(246,241,226,.85)',           // 红底的浅色描边（让它从背景里跳出来）
+    hellStroke: '#f6f1e2',                         // 文字白色描边
+    hellStrokeW: 5,
+    hellText: '#12100e'                            // 文字填色（近黑，配白描边最清楚）
   };
 
   G.derive();

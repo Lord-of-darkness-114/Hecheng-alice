@@ -441,17 +441,25 @@
     var key = version || G.nameVersion;
     var set = G.NAME_SETS[key] || G.NAME_SETS[G.NAME_VERSION_DEFAULT];
     var names = (set && set.names) || [];
+    /* 覆盖表支持两种写法：按版本分 {normal:{6:'x'}, hell:{6:'y'}} 或全局扁平 {6:'x'} */
+    var ovAll = G.ACHV_CHAR_NAMES || {};
+    var ov = ovAll[key] || ovAll[G.NAME_VERSION_DEFAULT] || ovAll;
     return String(text).replace(/\{(\d)\}/g, function (m, d) {
       var i = parseInt(d, 10);
-      if (G.ACHV_CHAR_NAMES && G.ACHV_CHAR_NAMES[i]) return G.ACHV_CHAR_NAMES[i];
+      if (ov && typeof ov[i] === 'string') return ov[i];
       var n = names[i];
       return n == null ? m : n;
     });
   };
 
-  /* 成就文案里的角色名覆盖（用户 2026-10-11 要求：6 阶在成就里叫"莉耶芙"，
-   * 但游戏里的名字（NAME_SETS）不动） */
-  G.ACHV_CHAR_NAMES = { 6: '莉耶芙' };
+  /* 成就文案里的角色名覆盖 —— **按命名版本分开**（用户 2026-10-11 要求）：
+   *   · 正常版成就里，第 6 阶叫"莉耶芙"
+   *   · 地狱版成就里，第 6 阶叫"玛丽苏"
+   * （游戏里的角色名不受影响，改的是 NAME_SETS） */
+  G.ACHV_CHAR_NAMES = {
+    normal: { 6: '莉耶芙' },
+    hell: { 6: '玛丽苏' }
+  };
 
   /* 角色类成就的名字覆盖（用户指定；没列到的用默认"合成出{角色名}"）。
    * ⚠️ 键是**0 起的阶索引**：1=古兹 2=维多利亚 3=伊丽莎白 4=多萝茜 5=蕾克 6=库嘻嘻 7=爱丽丝。
@@ -488,9 +496,8 @@
   };
   /* 地狱版那套 —— 用户说名字稍后给，先用**占位名**（给名字就替换这里） */
   G.ACHV_HELL_CUM_NAMES = {
-    1: '（地狱·待命名1阶）', 2: '（地狱·待命名2阶）', 3: '（地狱·待命名3阶）',
-    4: '（地狱·待命名4阶）', 5: '（地狱·待命名5阶）', 6: '（地狱·待命名6阶）',
-    7: '（地狱·待命名7阶）'
+    1: 'kfc全家桶', 2: 'AAAAA杯子批发', 3: '释然了', 4: '触手养殖场',
+    5: '至少加起来远超常人寿命不是吗？', 6: '库嘻嘻', 7: '蠕动潜行而来'
   };
   G.ACHV_HELL_FIRST_NAME = '（地狱·待命名·初次合成）';
   /* 地狱版的"第一次合成出第 N 阶"（镜像正常版那 7 条）—— 用户 2026-10-11 给定，低阶→高阶 */
@@ -622,6 +629,22 @@
     /* 开始界面入口：长宽比不变、面积约原来的 2 倍（168×40 → 238×57），位置挪到
      * "开始游戏"按钮正下方（按钮 y 752~870，取 900 留 30px 间距） */
     entryW: 238, entryH: 57, entryY: 900
+  };
+
+  /* 合成时的"角色喊话"字幕样式。
+   * ★ 2026-10-11 用户要求：**地狱版**改成"红底 + 白色描边的草书"；
+   *   正常版保持原来的金色描边字。
+   *   草书字体 = 网页里嵌入的 BSLabel（柳建毛草子集，见 index.html 的 @font-face），
+   *   ⚠️ 子集里必须包含所有角色名用字，否则会回退成系统字体（见交接文档"草书字体"一节）。 */
+  G.BANNER = {
+    t: 1.3,                                        // 停留秒数
+    y: 0.34,                                       // 纵向位置（屏幕高度比例）
+    hellFont: '700 46px BSLabel, STXingkai, STLiti, LiSu, KaiTi, serif',
+    hellBg: 'rgba(146,26,34,.90)',                 // 红底
+    hellBgEdge: 'rgba(246,241,226,.85)',           // 红底的浅色描边（让它从背景里跳出来）
+    hellStroke: '#f6f1e2',                         // 文字白色描边
+    hellStrokeW: 5,
+    hellText: '#12100e'                            // 文字填色（近黑，配白描边最清楚）
   };
 
   G.derive();

@@ -276,12 +276,14 @@
       this.fx.push({ kind: 'text', x: x, y: y, t: 0, life: 0.9, text: text });
     },
 
-    /* 合成时的"角色喊话"字幕（名字取当前命名版本） */
+    /* 合成时的"角色喊话"字幕（名字取当前命名版本）
+     * ★ 2026-10-11 用户要求：**地狱版**用红底 + 白色描边的草书（样式见 G.BANNER） */
     say: function (tier) {
       var name = G.tierName(tier);
       if (!name) return;
       this.banner.text = name;
-      this.banner.t = 1.3;
+      this.banner.t = (G.BANNER && G.BANNER.t) || 1.3;
+      this.banner.hell = (G.nameVersion === 'hell');
     },
 
     update: function (dt) {
@@ -1208,12 +1210,33 @@
         c.globalAlpha = 1;
       }
 
-      // 角色喊话字幕
+      // 角色喊话字幕（地狱版：红底 + 白色描边的草书；正常版：原来的金色字）
       if (this.banner.t > 0) {
+        var B = G.BANNER || {};
+        var by = D.h * ((B.y != null) ? B.y : 0.34);
         c.globalAlpha = Math.min(1, this.banner.t);
-        c.font = '700 40px ' + G.THEME.fontFamily;
-        c.fillStyle = C.goldBright;
-        c.fillText(this.banner.text, D.w / 2, D.h * 0.34);
+        if (this.banner.hell) {
+          c.font = B.hellFont || '700 46px BSLabel, serif';
+          var tw = c.measureText(this.banner.text).width;
+          var padX = 34, bh = 78;
+          c.beginPath();
+          this.roundRect(c, D.w / 2 - tw / 2 - padX, by - bh * 0.64, tw + padX * 2, bh, 10);
+          c.fillStyle = B.hellBg || 'rgba(146,26,34,.90)';
+          c.fill();
+          c.lineWidth = 2;
+          c.strokeStyle = B.hellBgEdge || 'rgba(246,241,226,.85)';
+          c.stroke();
+          c.lineJoin = 'round';
+          c.lineWidth = B.hellStrokeW || 5;
+          c.strokeStyle = B.hellStroke || '#f6f1e2';
+          c.strokeText(this.banner.text, D.w / 2, by);      // 白色描边先画
+          c.fillStyle = B.hellText || '#12100e';
+          c.fillText(this.banner.text, D.w / 2, by);        // 再填近黑的字
+        } else {
+          c.font = '700 40px ' + G.THEME.fontFamily;
+          c.fillStyle = C.goldBright;
+          c.fillText(this.banner.text, D.w / 2, by);
+        }
         c.globalAlpha = 1;
       }
       if (this.toast.t > 0) {

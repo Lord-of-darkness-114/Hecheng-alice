@@ -254,6 +254,15 @@
         G.Achv.save();
       }
       if (qs('achv')) game.openAchievements();     // 调试：直接打开成就面板（截图/验证用）
+      /* 调试：?hell=1 直接切到地狱版；?say=N 进游戏并显示第 N 阶的角色字幕
+       * （字幕平时 1.3 秒就淡掉，这里把它钉住方便截图）例：?hell=1&say=2 */
+      if (qs('hell')) game.setNameVersion('hell');
+      var sm = /[?&]say=(\d+)/.exec(root.location.search);
+      if (sm) {
+        game.startGame();
+        game.render.say(parseInt(sm[1], 10) - 1);
+        game.render.banner.t = 9999;
+      }
       // ?showtier=N —— 调试：清空场地只在中间摆一颗第 N 阶的球
       var st = /[?&]showtier=(\d+)/.exec(root.location.search);
       if (st) {

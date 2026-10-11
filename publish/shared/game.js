@@ -52,6 +52,7 @@
     this.hold = { tier: this._rollTier() };
     this.holdX = G.DESIGN.w / 2;
     this._dropCd = 0;
+    this._gameTier = [0, 0, 0, 0, 0, 0, 0, 0];   // 本局各阶合出几个（「一局内 N 个」+「全图鉴」用）
     return this;
   };
 
@@ -275,6 +276,18 @@
     this.render.flash = Math.min(0.5, this.render.flash + 0.18);
     G.Sound.playMerge(tier + 1);
     if (G.Achv) this._achv(G.Achv.noteMerge(tier + 1, this.combo));   // 统计 + 查成就
+    /* 「一局内合成出 N 个某角色」+「全图鉴」（2026-10-11 改版：按版本分流） */
+    if (G.Achv) {
+      if (!this._gameTier) this._gameTier = [0, 0, 0, 0, 0, 0, 0, 0];
+      this._gameTier[tier + 1] = (this._gameTier[tier + 1] || 0) + 1;
+      this._achv(G.Achv.noteGameTier(G.nameVersion, tier + 1, this._gameTier[tier + 1]));
+      // 单局内把 7 个角色都合出来一次
+      var seenTiers = 0;
+      for (var tk = 1; tk < this._gameTier.length; tk++) {
+        if (this._gameTier[tk] > 0) seenTiers++;
+      }
+      if (seenTiers >= G.THEME.tiers.length - 1) this._achv(G.Achv.noteAllTiers());
+    }
     this.ad.vibrate(12);
     return nb;
   };
@@ -334,6 +347,9 @@
     if (!G.setNameVersion(key)) return false;
     if (this.ad.setNameVersion) this.ad.setNameVersion(key);
     G.Sound.setBgmForVersion(key);          // 地狱版 / 正常版各有自己的 BGM
+    /* ★ 单局累计成就是按版本分开算的（用户 2026-10-11 要求），所以中途换版本要把
+     * 本局计数清零 —— 否则正常版攒的 30 个会算到地狱版头上。 */
+    this._gameTier = [0, 0, 0, 0, 0, 0, 0, 0];
     // 切换后重新喊一次当前持球的名字，让玩家立刻看到变化
     if (this.hold) this.render.say(this.hold.tier);
     return true;
@@ -639,10 +655,10 @@
     ok('已解锁的不会重复解锁',
       G.Achv.newlyUnlocked(s1, { first_merge: 1 }).indexOf('first_merge') < 0, '');
     var topIdx = G.THEME.tiers.length - 1;
-    var s2 = G.Achv.blankStats(); s2.tierMerges[topIdx] = 1;
+    var s2 = G.Achv.blankStats(); s2.tierMergesNormal[topIdx] = 1;
     ok('合出最高阶角色会解锁对应角色成就',
-      G.Achv.newlyUnlocked(s2, {}).indexOf('tier_' + topIdx) >= 0,
-      G.Achv.newlyUnlocked(s2, {}).join(','));
+      G.Achv.newlyUnlocked(s2, {}, 'normal').indexOf('tier_' + topIdx) >= 0,
+      G.Achv.newlyUnlocked(s2, {}, 'normal').join(','));
     var back = G.Achv.parse(G.Achv.serialize({ merges: 7 }, { first_merge: 123 }));
     ok('成就存档能原样读回',
       back.stats.merges === 7 && back.unlocked.first_merge === 123, JSON.stringify(back));
@@ -657,6 +673,102 @@
         this.closeAchievements();
         return opened && (this.screen === before);
       }).call(this), '');
+
+    // 7i) 图标 / 名字 / 入口尺寸（2026-10-11 用户提的改动，钉住免得改回去）
+    var badIcon = [];
+    for (var ai2 = 0; ai2 < AL.length; ai2++) {
+      if ((G.ACHV_ICONS || []).indexOf(AL[ai2].icon) < 0) badIcon.push(AL[ai2].id);
+    }
+    ok('每条成就的图标都在支持列表里', badIcon.length === 0, badIcon.join(','));
+    ok('角色成就用上了用户指定的名字',
+      (function () {
+        var a1 = G.Achv.byId('tier_1'), a7 = G.Achv.byId('tier_7');
+        return a1 && a1.name === '下金蛋的鸟' && a7 && a7.name.indexOf('爱丽丝爱丽丝') === 0;
+      })(), G.Achv.byId('tier_1') ? G.Achv.byId('tier_1').name : '无');
+    ok('成就入口：面积约 2 倍且长宽比不变',
+      (function () {
+        var UI = G.ACHV_UI;
+        var ratio = (UI.entryW * UI.entryH) / (168 * 40);
+        return ratio > 1.9 && ratio < 2.1
+          && Math.abs((UI.entryW / UI.entryH) - (168 / 40)) < 0.05;
+      })(), G.ACHV_UI.entryW + 'x' + G.ACHV_UI.entryH
+        + '（' + ((G.ACHV_UI.entryW * G.ACHV_UI.entryH) / (168 * 40)).toFixed(2) + ' 倍）');
+
+    // 7j) 「一局内合成出 N 个某角色」系列（2026-10-11 改版：单局计数 + 按命名版本分流）
+    var cumOk = true, cumDetail = '';
+    for (var ci = 1; ci < G.THEME.tiers.length; ci++) {
+      var need = G.ACHV_CUM_THRESHOLDS[ci];
+      var cdef = G.Achv.byId('cum_' + ci), hdef = G.Achv.byId('hell_cum_' + ci);
+      if (!cdef || !hdef || !need) { cumOk = false; cumDetail = '缺 cum_ / hell_cum_ ' + ci; break; }
+      if (cdef.ver !== 'normal' || hdef.ver !== 'hell') {
+        cumOk = false; cumDetail = '第 ' + ci + ' 阶的版本标记不对'; break;
+      }
+      var marked = {}; marked['tier_' + ci] = 1;      // 把"合出这个角色"那条挡掉
+      var stA = G.Achv.blankStats();
+      stA.gameTierNormal[ci] = need;
+      if (G.Achv.newlyUnlocked(stA, marked, 'normal').indexOf('cum_' + ci) < 0) {
+        cumOk = false; cumDetail = 'cum_' + ci + '（单局 ' + need + ' 个）没解锁'; break;
+      }
+      stA.gameTierNormal[ci] = need - 1;              // 差一个不该解锁
+      if (G.Achv.newlyUnlocked(stA, marked, 'normal').indexOf('cum_' + ci) >= 0) {
+        cumOk = false; cumDetail = 'cum_' + ci + ' 在单局 ' + (need - 1) + ' 个时就解锁了'; break;
+      }
+      var stB = G.Achv.blankStats();
+      stB.gameTierHell[ci] = need;                    // 只在地狱版做到过
+      if (G.Achv.newlyUnlocked(stB, marked, 'normal').indexOf('cum_' + ci) >= 0) {
+        cumOk = false; cumDetail = '第 ' + ci + ' 阶：地狱版的成绩把正常版成就解了'; break;
+      }
+      var stC = G.Achv.blankStats();
+      stC.gameTierNormal[ci] = need;                  // 只在正常版做到过
+      if (G.Achv.newlyUnlocked(stC, marked, 'hell').indexOf('hell_cum_' + ci) >= 0) {
+        cumOk = false; cumDetail = '第 ' + ci + ' 阶：正常版的成绩把地狱版成就解了'; break;
+      }
+      var stD = G.Achv.blankStats();
+      stD.gameTierHell[ci] = need;                    // 地狱版自己那套要能解锁
+      if (G.Achv.newlyUnlocked(stD, marked, 'hell').indexOf('hell_cum_' + ci) < 0) {
+        cumOk = false; cumDetail = 'hell_cum_' + ci + ' 没解锁'; break;
+      }
+    }
+    ok('7 条单局累计成就：门槛准确、正常版与地狱版各算各的', cumOk, cumDetail);
+
+    ok('「初次合成」只有正常版能拿，地狱版另有一条',
+      (function () {
+        var s = G.Achv.blankStats(); s.merges = 1; s.hellMerges = 1;
+        return G.Achv.newlyUnlocked(s, {}, 'normal').indexOf('first_merge') >= 0
+            && G.Achv.newlyUnlocked(s, {}, 'hell').indexOf('first_merge') < 0
+            && G.Achv.newlyUnlocked(s, {}, 'hell').indexOf('hell_first_merge') >= 0
+            && G.Achv.newlyUnlocked(s, {}, 'normal').indexOf('hell_first_merge') < 0;
+      })(), G.Achv.byId('hell_first_merge') ? G.Achv.byId('hell_first_merge').name : '无');
+    ok('成就文案里的角色名覆盖**按版本分流**（正常=莉耶芙 / 地狱=玛丽苏）',
+      G.achvFill('{6}', 'normal') === '莉耶芙' && G.achvFill('{6}', 'hell') === '玛丽苏',
+      'normal=' + G.achvFill('{6}', 'normal') + ' hell=' + G.achvFill('{6}', 'hell'));
+    ok('地狱版角色字幕有"红底 + 白色描边草书"的配置（G.BANNER）',
+      !!(G.BANNER && G.BANNER.hellFont && G.BANNER.hellBg && G.BANNER.hellStroke),
+      G.BANNER ? G.BANNER.hellFont : '无');
+    ok('伊丽莎白那条已改名为「魂之贵夫人」',
+      G.Achv.byId('tier_3') && G.Achv.byId('tier_3').name === '魂之贵夫人',
+      G.Achv.byId('tier_3') ? G.Achv.byId('tier_3').name : '无');
+    ok('"第一次合成出各阶"也是两套（正常/地狱各 7 条、数据分开）',
+      (function () {
+        for (var ti2 = 1; ti2 < G.THEME.tiers.length; ti2++) {
+          var a2 = G.Achv.byId('tier_' + ti2), b2 = G.Achv.byId('hell_tier_' + ti2);
+          if (!a2 || !b2 || a2.ver !== 'normal' || b2.ver !== 'hell') return false;
+          var sn = G.Achv.blankStats(); sn.tierMergesNormal[ti2] = 1;
+          if (G.Achv.newlyUnlocked(sn, {}, 'normal').indexOf('tier_' + ti2) < 0) return false;
+          if (G.Achv.newlyUnlocked(sn, {}, 'hell').indexOf('hell_tier_' + ti2) >= 0) return false;
+          var sh = G.Achv.blankStats(); sh.tierMergesHell[ti2] = 1;
+          if (G.Achv.newlyUnlocked(sh, {}, 'hell').indexOf('hell_tier_' + ti2) < 0) return false;
+          if (G.Achv.newlyUnlocked(sh, {}, 'normal').indexOf('tier_' + ti2) >= 0) return false;
+        }
+        return true;
+      })(),
+      '正常版 ' + G.Achv.byId('tier_1').name + ' / 地狱版占位 ' + G.Achv.byId('hell_tier_1').name);
+    var sHell = G.Achv.blankStats(); sHell.hellGames = 1;
+    ok('在地狱版玩一局会解锁「另一个世界」',
+      G.Achv.newlyUnlocked(sHell, {}, 'hell').indexOf('hell_world') >= 0, '');
+    var sAll = G.Achv.blankStats(); sAll.allTiersInOneGame = 1;
+    ok('单局集齐 7 个角色会解锁「全图鉴」',
+      G.Achv.newlyUnlocked(sAll, {}, 'normal').indexOf('all_tiers') >= 0, '');
 
     // 7d) BGM：两个命名版本各一首，版本名写错要能回退
     ok('两个版本各有自己的 BGM 文件',
