@@ -214,6 +214,15 @@
         game.hold = null;
       }
       game.start();
+      /* 后台把**另一个**命名版本的球体贴图也悄悄下下来（不 await、不阻塞开始界面）。
+       * ★ 2026-10-11 加：以前切版本时才开始下载，云端（GitHub Pages / Cloudflare）
+       *   第一次访问会先看到占位球；现在在开始界面停留的时间就把它下好了。 */
+      if (G.Render.preloadVariant && G.NAME_VERSION_ORDER) {
+        for (var vi = 0; vi < G.NAME_VERSION_ORDER.length; vi++) {
+          var tv = G.textureVariantOf[G.NAME_VERSION_ORDER[vi]];
+          if (tv) G.Render.preloadVariant(tv);
+        }
+      }
       // 看门狗必须在主循环开始之后再启动：加载期间一帧都没有，
       // 提前启动会让它把"还没开始渲染"误判成"rAF 不派发"
       ad.startFrameWatchdog();
