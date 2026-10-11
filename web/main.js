@@ -235,15 +235,19 @@
       if (qs('achvreset') && G.Achv) G.Achv.reset();
       if (qs('unlockall') && G.Achv && G.ACHIEVEMENTS) {
         for (var ai = 0; ai < G.ACHIEVEMENTS.length; ai++) G.Achv.unlocked[G.ACHIEVEMENTS[ai].id] = 1;
-        // 统计也抬到成就门槛，这样面板上的进度显示才合理（比如 3/3、30/30）
+        // 统计也抬到成就门槛，这样面板上的进度显示才合理（比如 30/30、40/40）
         var st = G.Achv.stats;
         st.merges = Math.max(st.merges, 100);      st.drops = Math.max(st.drops, 100);
         st.games = Math.max(st.games, 10);         st.best = Math.max(st.best, 5000);
         st.maxCombo = Math.max(st.maxCombo, 6);    st.aliceCount = Math.max(st.aliceCount, 5);
         st.hellGames = Math.max(st.hellGames, 1);  st.allTiersInOneGame = 1;
+        st.hellMerges = Math.max(st.hellMerges, 1);
         for (var ti = 0; ti < st.tierMerges.length; ti++) {
           var cumNeed = (G.ACHV_CUM_THRESHOLDS && G.ACHV_CUM_THRESHOLDS[ti]) || 1;
           st.tierMerges[ti] = Math.max(st.tierMerges[ti], cumNeed);
+          // 「一局内 N 个」的两套统计（正常版 / 地狱版）都要抬到门槛
+          st.gameTierNormal[ti] = Math.max(st.gameTierNormal[ti], cumNeed);
+          st.gameTierHell[ti] = Math.max(st.gameTierHell[ti], cumNeed);
         }
         G.Achv.save();
       }

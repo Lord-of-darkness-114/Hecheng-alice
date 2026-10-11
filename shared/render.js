@@ -1006,7 +1006,8 @@
     showAchievement: function (def) {
       if (!def) return this;
       var fill = G.achvFill || function (t) { return t; };
-      var item = { name: fill(def.name), desc: fill(def.desc), icon: this.iconOf(def) };
+      var item = { name: fill(def.name, def.ver), desc: fill(def.desc, def.ver),
+                   icon: this.iconOf(def) };
       if (this.achvToast.t > 0) this.achvToasts.push(item);
       else this.achvToast = {
         name: item.name, desc: item.desc, icon: item.icon,

@@ -433,21 +433,33 @@
     return (set && set.names) || [];
   };
 
-  /* 把文案里的 {0}~{7} 换成当前版本的角色名 */
-  G.achvFill = function (text) {
-    var names = G.achvNames();
+  /* 把文案里的 {0}~{7} 换成角色名。
+   * version 省略时用当前命名版本；成就自带 ver（如地狱版专属成就）就传它 ——
+   * 这样地狱版成就的文案永远用**地狱版**角色名，不受当前版本影响。
+   * 另外 G.ACHV_CHAR_NAMES 能覆盖**成就文案里**的角色名（游戏里不变）。 */
+  G.achvFill = function (text, version) {
+    var key = version || G.nameVersion;
+    var set = G.NAME_SETS[key] || G.NAME_SETS[G.NAME_VERSION_DEFAULT];
+    var names = (set && set.names) || [];
     return String(text).replace(/\{(\d)\}/g, function (m, d) {
-      var n = names[parseInt(d, 10)];
+      var i = parseInt(d, 10);
+      if (G.ACHV_CHAR_NAMES && G.ACHV_CHAR_NAMES[i]) return G.ACHV_CHAR_NAMES[i];
+      var n = names[i];
       return n == null ? m : n;
     });
   };
 
-  /* 角色类成就的名字覆盖（用户 2026-10-11 指定；没列到的用默认"合成出{角色名}"）。
+  /* 成就文案里的角色名覆盖（用户 2026-10-11 要求：6 阶在成就里叫"莉耶芙"，
+   * 但游戏里的名字（NAME_SETS）不动） */
+  G.ACHV_CHAR_NAMES = { 6: '莉耶芙' };
+
+  /* 角色类成就的名字覆盖（用户指定；没列到的用默认"合成出{角色名}"）。
    * ⚠️ 键是**0 起的阶索引**：1=古兹 2=维多利亚 3=伊丽莎白 4=多萝茜 5=蕾克 6=库嘻嘻 7=爱丽丝。
    * ⚠️ 必须定义在 G.ACHIEVEMENTS **之前**：下面那个 IIFE 会立刻读它。 */
   G.ACHV_TIER_NAMES = {
     1: '下金蛋的鸟',
     2: '皇家红茶',
+    3: '魂之贵夫人',
     4: '教师节快乐',
     5: '怨头帽耋',
     6: '腹击',
@@ -459,42 +471,77 @@
   G.ACHV_ICONS = ['eye', 'egg', 'cup', 'apple', 'skull', 'key'];
   G.ACHV_TIER_ICONS = { 1: 'egg', 2: 'cup', 3: 'eye', 4: 'apple', 5: 'skull', 6: 'key', 7: 'key' };
 
-  /* 「累计合成出 N 个某角色」这一系列的门槛（键=0 起的阶索引；只列出的阶才有，
-   * 2026-10-11 用户要求加）。越高阶越难合，所以门槛递减。 */
-  G.ACHV_CUM_THRESHOLDS = { 1: 30, 2: 20, 3: 12, 4: 8, 5: 5, 6: 3, 7: 3 };
+  /* 「**一局内**合成出 N 个某角色」这一系列（2026-10-11 用户改版：
+   * 原来跨局累计 → 现在**单局内**计数；并且**按命名版本分流**）：
+   *   · 门槛（键=0 起的阶索引，越高阶越难合所以递减）
+   *   · 名字（用户指定）
+   *   · ⚠️ 正常版一套（`cum_N`）+ 地狱版一套（`hell_cum_N`），各算各的、互不解锁 */
+  G.ACHV_CUM_THRESHOLDS = { 1: 40, 2: 25, 3: 20, 4: 15, 5: 12, 6: 7, 7: 5 };
+  G.ACHV_CUM_NAMES = {
+    1: '子孙满堂',
+    2: '国王来了',
+    3: 'AAAAA戒指批发',
+    4: '三人行必有我师',
+    5: '我砍我砍我砍',
+    6: '莉耶芙还是玛丽苏还是玛丽安！？',
+    7: '蠕动潜行而来'
+  };
+  /* 地狱版那套 —— 用户说名字稍后给，先用**占位名**（给名字就替换这里） */
+  G.ACHV_HELL_CUM_NAMES = {
+    1: '（地狱·待命名1阶）', 2: '（地狱·待命名2阶）', 3: '（地狱·待命名3阶）',
+    4: '（地狱·待命名4阶）', 5: '（地狱·待命名5阶）', 6: '（地狱·待命名6阶）',
+    7: '（地狱·待命名7阶）'
+  };
+  G.ACHV_HELL_FIRST_NAME = '（地狱·待命名·初次合成）';
 
   G.ACHIEVEMENTS = (function () {
     var tierList = [];
     /* 角色类：合成出第 2~8 阶各一条（第 1 阶不会作为合成结果出现） */
     for (var t = 1; t < 8; t++) {
       (function (idx) {
+        var icon = G.ACHV_TIER_ICONS[idx] || 'eye';
+        var cumN = G.ACHV_CUM_THRESHOLDS[idx];
+        /* ① 合出这个角色（两种命名版本都能拿） */
         tierList.push({
           id: 'tier_' + idx,
-          /* 名字：用户在 G.ACHV_TIER_NAMES 里指定了就用他的（2026-10-11 改成梗名），
-           * 否则用默认模板"合成出{角色名}" */
           name: G.ACHV_TIER_NAMES[idx] || ('合成出{' + idx + '}'),
           desc: '把两个{' + (idx - 1) + '}合成在一起',
-          icon: G.ACHV_TIER_ICONS[idx] || 'eye',
+          icon: icon,
           test: function (s) { return s.tierMerges[idx] >= 1; }
         });
-        /* 紧随其后再加一条"累计合成出 N 个"（用户 2026-10-11 要求；门槛见上表）。
-         * 名字用"囤积{角色名}"，说明里写清数量，右侧显示 x/N 进度。 */
-        var cumN = G.ACHV_CUM_THRESHOLDS[idx];
+        /* ② 一局内合成出 N 个（**只在正常版能拿**） */
         if (cumN) {
           tierList.push({
             id: 'cum_' + idx,
-            name: '囤积{' + idx + '}',
-            desc: '累计合成出 ' + cumN + ' 个{' + idx + '}',
-            icon: G.ACHV_TIER_ICONS[idx] || 'eye',
-            test: function (s) { return s.tierMerges[idx] >= cumN; },
-            prog: function (s) { return Math.min(s.tierMerges[idx], cumN) + '/' + cumN; }
+            ver: 'normal',
+            name: G.ACHV_CUM_NAMES[idx] || ('量产{' + idx + '}'),
+            desc: '一局内合成出 ' + cumN + ' 个{' + idx + '}',
+            icon: icon,
+            test: function (s) { return s.gameTierNormal[idx] >= cumN; },
+            prog: function (s) { return Math.min(s.gameTierNormal[idx], cumN) + '/' + cumN; }
+          });
+          /* ③ 地狱版专属的同类成就（名字待用户给，先用占位；数据也各算各的） */
+          tierList.push({
+            id: 'hell_cum_' + idx,
+            ver: 'hell',
+            name: G.ACHV_HELL_CUM_NAMES[idx] || ('（地狱·待命名' + idx + '阶）'),
+            desc: '一局内合成出 ' + cumN + ' 个{' + idx + '}',
+            icon: icon,
+            test: function (s) { return s.gameTierHell[idx] >= cumN; },
+            prog: function (s) { return Math.min(s.gameTierHell[idx], cumN) + '/' + cumN; }
           });
         }
       })(t);
     }
     var mile = [
-      { id: 'first_merge', name: '初次合成', desc: '完成第一次合成', icon: 'eye',
+      /* 「初次合成」+ 上面那 7 条单局累计：**只有正常版能拿**（用户 2026-10-11 要求） */
+      { id: 'first_merge', name: '初次合成', desc: '完成第一次合成', icon: 'eye', ver: 'normal',
         test: function (s) { return s.merges >= 1; } },
+      /* 地狱版单独一条对应的（名字待用户给） */
+      { id: 'hell_first_merge', ver: 'hell',
+        name: G.ACHV_HELL_FIRST_NAME || '（地狱·待命名·初次合成）',
+        desc: '在地狱版完成第一次合成', icon: 'eye',
+        test: function (s) { return s.hellMerges >= 1; } },
       { id: 'first_game', name: '第一局', desc: '玩完一局（无论输赢）', icon: 'key',
         test: function (s) { return s.games >= 1; } },
       { id: 'combo3', name: '连锁反应', desc: '一次连击达到 3 连', icon: 'skull',
