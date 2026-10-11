@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>BLACK SOULS 合成 · 物理原型</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#08070a;overflow:hidden;
+    font-family:Georgia,"Times New Roman","Songti SC",serif;color:#e8e0cc;
+    -webkit-tap-highlight-color:transparent;user-select:none;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{display:block;touch-action:none;box-shadow:0 0 60px #000 inset,0 0 40px rgba(0,0,0,.9);}
+  #tip{position:fixed;left:0;right:0;bottom:6px;text-align:center;font-size:12px;color:#6b6350;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="tip">拖动移动 · 松手投放 &nbsp;|&nbsp; 同阶相撞即合成 &nbsp;|&nbsp; 点击场地重开</div>
+
+<script src="../vendor/matter.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ============ 1. 基础设置（设计分辨率 720x1280，竖屏 9:16） ============ */
+  var VW = 720, VH = 1280;          // 逻辑分辨率
+  var MAXSTEP = 1000 / 60;           // 物理固定步长：60Hz
+  var WALL = 16;                     // 侧墙厚度
+
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var layer = document.createElement('canvas');   // 高清渲染层（DPR 适配）
+  var lctx = layer.getContext('2d');
+
+  var dpr = 1, viewScale = 1;
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    viewScale = Math.min(w / VW, h / VH);
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.style.width = (VW * viewScale) + 'px';
+    canvas.style.height = (VH * viewScale) + 'px';
+    canvas.width = Math.round(VW * viewScale * dpr);
+    canvas.height = Math.round(VH * viewScale * dpr);
+    layer.width = canvas.width;
+    layer.height = canvas.height;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* ============ 2. 阶级表（贴图到位后把 drawBody 换成 drawImage 即可） ============ */
+  var TIERS = [
+    { r: 27,  color: '#8e2b32', name: '小恶魔' },
+    { r: 37,  color: '#b8763a', name: '骷髅兵' },
+    { r: 50,  color: '#d8b45a', name: '狂人' },
+    { r: 64,  color: '#6f8f4a', name: '食尸鬼' },
+    { r: 80,  color: '#3f7d8c', name: '黑骑士' },
+    { r: 99,  color: '#7d4a8f', name: '魔女' },
+    { r: 120, color: '#b03a2e', name: '巨龙' },
+    { r: 145, color: '#c9a227', name: '魔王' }
+  ];
+  var SPAWNABLE = 4;               // 只投放前 5 阶中的……
+  var SPAWN_POOL = [0, 1, 2, 3, 4]; // 出现池
+  var SCORE_OF = [1, 2, 4, 8, 16, 32, 64, 128];
+
+  /* ============ 3. 玩法区域 ============ */
+  var PAD = 14;
+  var BOX = { x: PAD, y: 190, w: VW - PAD * 2, h: VH - PAD * 2 - 190 };
+  var CEIL_Y = BOX.y - 34;          // 触顶警戒线
+  var FLOOR_Y = BOX.y + BOX.h;
+  var DROP_Y = BOX.y + 30;
+
+  /* ============ 4. 物理引擎 ============ */
+  var Engine = Matter.Engine, World = Matter.World, Bodies = Matter.Bodies,
+      Body = Matter.Body, Composite = Matter.Composite, Events = Matter.Events;
+
+  var engine = Engine.create();
+  engine.gravity.y = 1.0;            // 参考站用的是 -20（约等于 0.8~1.2 的手感）
+  engine.enableSleeping = true;      // 静止的球进入睡眠，省 CPU、防堆叠抖动
+
+  // —— 求解器调参：合成类游戏的手感就靠这几个数 ——
+  // 迭代次数越多，球越不容易互相嵌入（代价是每帧 CPU）
+  engine.positionIterations = (function () {
+    var m = /[?&]iters=(\d+)/.exec(location.search); return m ? +m[1] : 10;
+  })();
+  engine.velocityIterations = 4;
+  engine.constraintIterations = 1;
+
+  // 几何分离轮数：?sep=0 关闭（对照实验），默认 2
+  var sepPass = (function () {
+    var m = /[?&]sep=(\d+)/.exec(location.search);
+    return m ? +m[1] : 2;
+  })();
+
+  var world = engine.world;
+
+  // 深度重叠修正：Matter 的位置修正在“球挤球”时偏软，这里在物理步之后
+  // 对仍然深嵌的球对做几何分离。关键点：同时平移 position 与 positionPrev，
+  // 否则 Matter 会把这次位移当成速度，下一帧球会突然弹开。
+  function separateOverlaps(maxPass) {
+    var arr = [], id;
+    for (id in balls) arr.push(balls[id]);
+    for (var pass = 0; pass < maxPass; pass++) {
+      var moved = 0;
+      for (var i = 0; i < arr.length; i++) {
+        var a = arr[i];
+        for (var j = i + 1; j < arr.length; j++) {
+          var b = arr[j];
+          var dx = b.position.x - a.position.x, dy = b.position.y - a.position.y;
+          var d2 = dx * dx + dy * dy;
+          var rs = a.circleRadius + b.circleRadius;
+          if (d2 >= rs * rs) continue;
+          var d = Math.sqrt(d2) || 0.0001;
+          var pen = rs - d;
+          if (pen < 1.0) continue;                    // 1px 内算正常接触
+          var nx = dx / d, ny = dy / d;
+          var ma = a.isStatic ? 0 : a.mass, mb = b.isStatic ? 0 : b.mass;
+          var tot = (ma + mb) || 1;
+          var sa = pen * (mb / tot), sb = pen * (ma / tot);
+          shift(a, -nx * sa, -ny * sa);
+          shift(b, nx * sb, ny * sb);
+          moved++;
+        }
+      }
+      if (!moved) break;
+    }
+  }
+  function shift(body, dx, dy) {
+    body.position.x += dx; body.positionPrev.x += dx;
+    body.position.y += dy; body.positionPrev.y += dy;
+  }
+
+  // 场地：左右墙 + 地板（静体，圆滑摩擦）
+  var wallOpt = { isStatic: true, friction: 0.28, restitution: 0.02, label: 'wall', render: { visible: false } };
+  World.add(world, [
+    Bodies.rectangle(BOX.x - WALL / 2, BOX.y + BOX.h / 2, WALL, BOX.h + 200, wallOpt),
+    Bodies.rectangle(BOX.x + BOX.w + WALL / 2, BOX.y + BOX.h / 2, WALL, BOX.h + 200, wallOpt),
+    Bodies.rectangle(VW / 2, FLOOR_Y + WALL / 2, BOX.w + WALL * 2, WALL, wallOpt)
+  ]);
+
+  /* ============ 5. 球 ============ */
+  var balls = {};
+
+  function makeBall(tier, x, y) {
+    var spec = TIERS[tier];
+    var body = Bodies.circle(x, y, spec.r, {
+      label: 'ball',
+      restitution: 0.06,            // 低弹性：避免“弹弹球”观感
+      friction: 0.42,               // 高摩擦：球堆更稳
+      frictionStatic: 1.0,
+      frictionAir: 0.008,
+      density: 0.0011,
+      slop: 0.04,                   // 允许轻微重叠，大幅减少抖动
+      sleepThreshold: 42,
+      chamfer: { radius: spec.r }
+    });
+    body.game = { tier: tier, born: 0, flash: 0, dying: false };
+    balls[body.id] = body;
+    World.add(world, body);
+    return body;
+  }
+
+  /* ============ 6. 合成 ============ */
+  var score = 0, best = 0, particles = [], toRemove = [], dead = false;
+
+  Events.on(engine, 'collisionStart', function (ev) {
+    if (dead) return;
+    var pairs = ev.pairs;
+    for (var i = 0; i < pairs.length; i++) {
+      var a = pairs[i].bodyA, b = pairs[i].bodyB;
+      if (!a.game || !b.game) continue;
+      if (a.game.dying || b.game.dying) continue;
+      if (a.game.tier !== b.game.tier) continue;
+      if (a.game.tier >= TIERS.length - 1) continue;   // 满级不再合
+
+      a.game.dying = b.game.dying = true;
+      var tier = a.game.tier;
+      var mx = (a.position.x + b.position.x) / 2;
+      var my = (a.position.y + b.position.y) / 2;
+      toRemove.push(a, b);
+
+      score += SCORE_OF[tier];
+      if (score > best) best = score;
+
+      var nb = makeBall(tier + 1, mx, my);
+      nb.game.born = 1;                                  // 放大动画
+      Body.setVelocity(nb, { x: 0, y: -0.6 });
+      burst(mx, my, TIERS[tier + 1].color);
+
+      if (tier + 1 >= TIERS.length - 1) flashText('魔王觉醒');
+    }
+  });
+
+  Events.on(engine, 'beforeUpdate', function () {
+    for (var i = 0; i < toRemove.length; i++) {
+      var b = toRemove[i];
+      delete balls[b.id];
+      World.remove(world, b);
+    }
+    toRemove.length = 0;
+  });
+
+  /* ============ 7. 投放 ============ */
+  var hold = null, holdX = VW / 2, cooldown = 0, ghost = 0;
+
+  function nextTier() { return SPAWN_POOL[(Math.random() * SPAWN_POOL.length) | 0]; }
+  function newHold() {
+    hold = { tier: nextTier(), x: holdX };
+    if (spawnHint) { /* reserved */ }
+  }
+  var spawnHint = false;
+
+  function drop() {
+    if (dead || !hold || cooldown > 0 || perfNote) return;
+    var x = clamp(hold.x, BOX.x + TIERS[hold.tier].r, BOX.x + BOX.w - TIERS[hold.tier].r);
+    var b = makeBall(hold.tier, x, DROP_Y);
+    b.game.born = 1;
+    ghost = 1;
+    cooldown = 0.34;                                   // 投放间隔（秒）
+    hold = { tier: nextTier(), x: hold.x };
+  }
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  /* ============ 8. 输入 ============ */
+  function toLogicX(clientX) {
+    var r = canvas.getBoundingClientRect();
+    return (clientX - r.left) / viewScale;
+  }
+  var dragging = false;
+
+  canvas.addEventListener('pointerdown', function (e) {
+    dragging = true;
+    holdX = toLogicX(e.clientX);
+    canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    holdX = toLogicX(e.clientX);
+  });
+  canvas.addEventListener('pointerup', function () { dragging = false; drop(); });
+  canvas.addEventListener('pointercancel', function () { dragging = false; });
+
+  // 键盘：左右微调 + 空格投放（网页版顺手）
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft') holdX -= 18;
+    else if (e.key === 'ArrowRight') holdX += 18;
+    else if (e.key === ' ') { e.preventDefault(); drop(); }
+    else if (e.key === 'r' || e.key === 'R') reset();
+  });
+
+  /* ============ 9. 特效 ============ */
+  function burst(x, y, color) {
+    for (var i = 0; i < 14; i++) {
+      var a = Math.random() * Math.PI * 2, s = 90 + Math.random() * 260;
+      particles.push({
+        x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60,
+        life: 0.42 + Math.random() * 0.25, t: 0, r: 2 + Math.random() * 3.5,
+        color: color, ring: i === 0
+      });
+    }
+  }
+  function updateParticles(dt) {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i];
+      p.t += dt;
+      if (p.t >= p.life) { particles.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 900 * dt; p.vx *= 0.98;
+    }
+  }
+
+  var banner = { text: '', t: 0 };
+  function flashText(t) { banner.text = t; banner.t = 1.6; }
+
+  /* ============ 10. 渲染 ============ */
+  // 贴图接入点：把这里改成 ctx.drawImage(texture[tier], x-r, y-r, 2r, 2r) 即可
+  function drawBall(c, x, y, r, tier, rot, alpha) {
+    var spec = TIERS[tier];
+    c.save();
+    c.globalAlpha = alpha;
+    // 阴影（贴图版可换成一张 drop-shadow 贴图）
+    c.beginPath();
+    c.arc(x + r * 0.08, y + r * 0.12, r, 0, 6.2832);
+    c.fillStyle = 'rgba(0,0,0,.45)';
+    c.fill();
+    // 主体：径向渐变模拟球面光照
+    var g = c.createRadialGradient(x - r * 0.34, y - r * 0.4, r * 0.1, x, y, r * 1.05);
+    g.addColorStop(0, lighten(spec.color, 0.42));
+    g.addColorStop(0.55, spec.color);
+    g.addColorStop(1, darken(spec.color, 0.5));
+    c.beginPath(); c.arc(x, y, r, 0, 6.2832); c.fillStyle = g; c.fill();
+    // 描边
+    c.lineWidth = Math.max(2, r * 0.07);
+    c.strokeStyle = 'rgba(0,0,0,.55)'; c.stroke();
+    // 高光
+    c.beginPath();
+    c.ellipse(x - r * 0.32, y - r * 0.38, r * 0.26, r * 0.17, -0.6, 0, 6.2832);
+    c.fillStyle = 'rgba(255,255,255,.5)'; c.fill();
+    c.restore();
+  }
+
+  function lighten(hex, k) { return mixHex(hex, '#ffffff', k); }
+  function darken(hex, k) { return mixHex(hex, '#000000', k); }
+  function mixHex(a, b, k) {
+    var ar = parseInt(a.substr(1, 2), 16), ag = parseInt(a.substr(3, 2), 16), ab = parseInt(a.substr(5, 2), 16);
+    var br = parseInt(b.substr(1, 2), 16), bg = parseInt(b.substr(3, 2), 16), bb = parseInt(b.substr(5, 2), 16);
+    var m = function (x, y) { return Math.round(x + (y - x) * k); };
+    return 'rgb(' + m(ar, br) + ',' + m(ag, bg) + ',' + m(ab, bb) + ')';
+  }
+
+  function render(t) {
+    var c = lctx;
+    // 相机变换：逻辑坐标 -> 设备像素
+    var s = viewScale * dpr;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, layer.width, layer.height);
+    c.setTransform(s, 0, 0, s, 0, 0);
+
+    // —— 背景（贴图接入点：c.drawImage(bgImg, 0, 0, VW, VH)）——
+    var bg = c.createLinearGradient(0, 0, 0, VH);
+    bg.addColorStop(0, '#151119');
+    bg.addColorStop(0.5, '#0c0a10');
+    bg.addColorStop(1, '#060509');
+    c.fillStyle = bg; c.fillRect(0, 0, VW, VH);
+
+    // 场地
+    var fg = c.createLinearGradient(0, BOX.y, 0, FLOOR_Y);
+    fg.addColorStop(0, 'rgba(46,32,44,.85)');
+    fg.addColorStop(1, 'rgba(20,12,20,.95)');
+    c.fillStyle = fg;
+    roundRect(c, BOX.x, BOX.y, BOX.w, BOX.h, 18); c.fill();
+    c.lineWidth = 3; c.strokeStyle = 'rgba(190,150,80,.35)';
+    roundRect(c, BOX.x, BOX.y, BOX.w, BOX.h, 18); c.stroke();
+
+    // 警戒线
+    c.save();
+    c.setLineDash([12, 10]);
+    c.lineWidth = 2;
+    c.globalAlpha = 0.35 + (dead ? 0.5 * Math.abs(Math.sin(t / 240)) : 0);
+    c.strokeStyle = dead ? '#e0553f' : '#c9a227';
+    c.beginPath(); c.moveTo(BOX.x + 4, CEIL_Y); c.lineTo(BOX.x + BOX.w - 4, CEIL_Y); c.stroke();
+    c.restore();
+
+    // 全部球体：只取插值后的视觉位置，物理位置不动
+    var ids = Object.keys(balls);
+    for (var i = 0; i < ids.length; i++) {
+      var b = balls[ids[i]];
+      var r = b.circleRadius;
+      drawBall(c, b.position.x, b.position.y, r, b.game.tier, b.angle, 1);
+    }
+
+    // 待投放的球 + 落点提示
+    if (!dead && hold) {
+      var hr = TIERS[hold.tier].r;
+      var hx = clamp(hold.x, BOX.x + hr, BOX.x + BOX.w - hr);
+      // 虚线光柱
+      c.save();
+      var pg = c.createLinearGradient(0, DROP_Y, 0, FLOOR_Y);
+      pg.addColorStop(0, 'rgba(220,190,120,.22)');
+      pg.addColorStop(1, 'rgba(220,190,120,0)');
+      c.fillStyle = pg;
+      c.fillRect(hx - hr * 0.14, DROP_Y, hr * 0.28, FLOOR_Y - DROP_Y);
+      c.strokeStyle = 'rgba(220,190,120,.30)';
+      c.lineWidth = 2; c.setLineDash([8, 10]);
+      c.beginPath(); c.arc(hx, DROP_Y, hr, 0, 6.2832); c.stroke();
+      c.restore();
+      drawBall(c, hx, DROP_Y, hr, hold.tier, 0, 0.9);
+    }
+
+    // 粒子
+    for (var p = 0; p < particles.length; p++) {
+      var q = particles[p], k = 1 - q.t / q.life;
+      c.globalAlpha = k;
+      if (q.ring) {
+        c.beginPath(); c.arc(q.x, q.y, 12 + (1 - k) * 70, 0, 6.2832);
+        c.lineWidth = 4 * k; c.strokeStyle = q.color; c.stroke();
+      } else {
+        c.beginPath(); c.arc(q.x, q.y, q.r * k, 0, 6.2832);
+        c.fillStyle = q.color; c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+
+    // HUD
+    c.textAlign = 'center';
+    c.fillStyle = '#c9a227';
+    c.font = '600 26px Georgia,serif';
+    c.fillText('BLACK SOULS · 合成原型', VW / 2, 62);
+    c.font = '700 66px Georgia,serif';
+    c.fillStyle = '#efe4c2';
+    c.fillText(String(score), VW / 2, 132);
+    c.font = '16px Georgia,serif';
+    c.fillStyle = '#8c8266';
+    c.fillText('最高 ' + best, VW / 2, 162);
+
+    if (dead) {
+      c.fillStyle = 'rgba(0,0,0,.62)';
+      c.fillRect(0, 0, VW, VH);
+      c.fillStyle = '#c0392b';
+      c.font = '700 68px Georgia,serif';
+      c.fillText('YOU DIED', VW / 2, VH / 2 - 20);
+      c.fillStyle = '#c9a227';
+      c.font = '22px Georgia,serif';
+      c.fillText('分数 ' + score + '　点击重开', VW / 2, VH / 2 + 40);
+    } else if (banner.t > 0) {
+      c.globalAlpha = Math.min(1, banner.t);
+      c.fillStyle = '#e8d79a';
+      c.font = '700 40px Georgia,serif';
+      c.fillText(banner.text, VW / 2, VH * 0.36);
+      c.globalAlpha = 1;
+    }
+
+    // 贴回屏幕
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(layer, 0, 0);
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  /* ============ 11. 主循环：固定步长 + 渲染插值 ============ */
+  var last = performance.now(), acc = 0;
+
+  // 性能采样（?perf=1 时保持场地空载，只测引擎+渲染的帧成本）
+  var perfNote = location.search.indexOf('perf') >= 0;
+  var perfT0 = 0, perfFrames = 0, perfWorst = 0;
+
+  function loop(now) {
+    var t0 = performance.now();
+    var dt = now - last; last = now;
+    if (dt > 200) dt = 200;                 // 切后台回来别炸
+    acc += dt;
+    var steps = 0;
+    while (acc >= MAXSTEP && steps < 5) {   // 最多补 5 步，防止死亡螺旋
+      Engine.update(engine, MAXSTEP);
+      if (sepPass) separateOverlaps(sepPass);
+      acc -= MAXSTEP; steps++;
+    }
+    if (steps === 0) { /* 高刷屏：这帧不动物理，只插值渲染 */ }
+
+    if (cooldown > 0) cooldown -= dt / 1000;
+    if (banner.t > 0) banner.t -= dt / 1000;
+    updateParticles(dt / 1000);
+    for (var id in balls) {
+      var b = balls[id];
+      if (b.game.born > 0) b.game.born = Math.max(0, b.game.born - dt / 160);
+      // 触顶判定：静止且高于警戒线
+      if (!dead && b.speed < 0.35 && b.position.y - b.circleRadius < CEIL_Y) {
+        b.game.over = (b.game.over || 0) + dt;
+        if (b.game.over > 900) gameOver();
+      } else b.game.over = 0;
+    }
+
+    render(now);
+
+    if (perfNote) {
+      if (!perfT0) { perfT0 = now; perfFrames = 0; }
+      perfFrames++;
+      var fdt = performance.now() - t0;                  // 本帧物理+渲染的真实成本
+      if (fdt > perfWorst) perfWorst = fdt;
+      if (now - perfT0 >= 1000) {
+        console.log('PERF tick_n=' + Object.keys(balls).length +
+          ' frames_per_s=' + (perfFrames * 1000 / (now - perfT0)).toFixed(1) +
+          ' worst_step_ms=' + perfWorst.toFixed(2));
+        perfT0 = now; perfFrames = 0; perfWorst = 0;
+      }
+    }
+
+    pump(loop);
+  }
+
+  // —— 帧驱动 ——
+  // 优先 requestAnimationFrame（跟随屏幕刷新率）；若环境长时间不派发 rAF
+  // （部分无头/后台/低端 WebView），自动退回 setTimeout 驱动，保证物理不冻结。
+  var rafOk = (typeof requestAnimationFrame === 'function');
+  var frames = 0, rafId = 0, watchdog = 0, usingTimer = !rafOk;
+
+  function pump(fn) {
+    if (usingTimer) { setTimeout(function () { fn(performance.now()); }, 16); return; }
+    rafId = requestAnimationFrame(function (t) { frames++; fn(t); });
+  }
+  function checkFrames() {
+    if (usingTimer) return;
+    if (frames === 0) {                       // 600ms 内一帧都没有 → 换驱动
+      usingTimer = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      pump(loop);
+      return;
+    }
+    frames = 0;
+    watchdog = setTimeout(checkFrames, 600);
+  }
+  function boot() {
+    last = performance.now();
+    pump(loop);
+    if (!usingTimer) watchdog = setTimeout(checkFrames, 600);
+  }
+
+  function gameOver() {
+    if (dead) return;
+    dead = true;
+    banner.t = 0;
+  }
+  function reset() {
+    for (var id in balls) World.remove(world, balls[id]);
+    balls = {}; particles.length = 0; toRemove.length = 0;
+    score = 0; dead = false; cooldown = 0;
+    newHold();
+    if (window.__game) window.__game.balls = balls;
+  }
+
+  canvas.addEventListener('click', function () { if (dead) reset(); });
+
+  newHold();
+  boot();
+
+  // ?bench=N —— 无人值守性能基准：先让球堆落定，再跑 N 步取平均
+  var benchN = /[?&]bench=(\d+)/.exec(location.search);
+  if (benchN) {
+    setTimeout(function () {
+      bench(60);                                  // 预热（含落定）
+      bench(parseInt(benchN[1], 10) || 300);       // 正式测量
+    }, 1500);
+  }
+
+  // ?stress=N —— 一次性灌 N 个球，测满载帧率
+  // ?grid=1 与 stress 搭配：按网格摆放（互不重叠），是更公平的负载对照
+  var stress = /[?&]stress=(\d+)/.exec(location.search);
+  if (stress) {
+    var n = Math.min(parseInt(stress[1], 10) || 30, 60);
+    var useGrid = location.search.indexOf('grid') >= 0;
+    for (var s = 0; s < n; s++) {
+      var t = (Math.random() * SPAWN_POOL.length) | 0;
+      var rr = TIERS[t].r;
+      var px, py;
+      if (useGrid) {
+        var cols = Math.floor(BOX.w / 150);
+        px = BOX.x + 80 + (s % cols) * 150;
+        py = BOX.y + 80 + Math.floor(s / cols) * 210;
+      } else {
+        px = BOX.x + rr + Math.random() * (BOX.w - rr * 2);
+        py = BOX.y + rr + Math.random() * (BOX.h * 0.45 - rr);
+      }
+      makeBall(t, px, py);
+    }
+  }
+
+  // ?auto=1 —— 自动投放，方便无人值守截图/压测物理稳定性
+  if (location.search.indexOf('auto') >= 0) {
+    setInterval(function () {
+      if (dead) { reset(); return; }
+      holdX = BOX.x + 40 + Math.random() * (BOX.w - 80);
+      drop();
+    }, 420);
+  }
+  // ?bench=1 —— 物理热路径微基准：固定跑 N 步，报告每步平均/最坏耗时
+  // 注意：在 headless + 虚拟时钟下 performance.now() 会被冻结，读到 0 属正常；
+  // 真实浏览器里这些数字就是每帧的物理开销。
+  function bench(steps) {
+    var arr = [], id, worst = 0, t0 = performance.now(), t0w = Date.now();
+    var per = [];
+    for (var k = 0; k < steps; k++) {
+      var s0 = performance.now();
+      Engine.update(engine, MAXSTEP);
+      if (sepPass) separateOverlaps(sepPass);
+      var d = performance.now() - s0;
+      per.push(d);
+      if (d > worst) worst = d;
+    }
+    var total = performance.now() - t0, totalW = Date.now() - t0w;
+    per.sort(function (a, b) { return a - b; });
+    for (id in balls) arr.push(balls[id]);
+    console.log('BENCH bodies=' + arr.length + ' steps=' + steps +
+      ' avg_step_ms=' + (total / steps).toFixed(3) +
+      ' p95_step_ms=' + per[Math.floor(steps * 0.95)].toFixed(3) +
+      ' max_step_ms=' + worst.toFixed(3) +
+      ' perf_total_ms=' + total.toFixed(1) +
+      ' wall_total_ms=' + totalW +
+      ' sep=' + sepPass + ' iters=' + engine.positionIterations);
+    return total / steps;
+  }
+
+  window.__game = { engine: engine, balls: balls, drop: drop, reset: reset, bench: bench };  // 调试用
+
+  // ?debug=1 —— 每秒把球体状态打到 console，便于自动化验证物理稳定性
+  if (location.search.indexOf('debug') >= 0) {
+    var tick = 0;
+    setInterval(function () {
+      tick++;
+      var rows = [];
+      for (var id in balls) {
+        var b = balls[id];
+        rows.push({ id: id, tier: b.game.tier, r: b.circleRadius,
+          x: Math.round(b.position.x), y: Math.round(b.position.y),
+          vx: +b.velocity.x.toFixed(2), vy: +b.velocity.y.toFixed(2),
+          sleeping: b.isSleeping, belowCeil: b.position.y - b.circleRadius < CEIL_Y });
+      }
+      rows.sort(function (a, b) { return a.y - b.y; });
+      // 纯文本 + 分号分隔：避免控制台转义引号，方便脚本解析
+      var txt = rows.map(function (r) {
+        return [r.id, r.tier, r.r, Math.round(r.x), Math.round(r.y), r.vx, r.vy, r.sleeping ? 1 : 0, r.belowCeil ? 1 : 0].join(',');
+      }).join(';');
+      // 穿透度量：两球圆心距小于半径和的超出量（>0 即视觉上重叠）
+      var arr = Object.keys(balls).map(function (k) { return balls[k]; });
+      var maxPen = 0, penSum = 0, penN = 0;
+      for (var a = 0; a < arr.length; a++) {
+        for (var b2 = a + 1; b2 < arr.length; b2++) {
+          var dx = arr[a].position.x - arr[b2].position.x;
+          var dy = arr[a].position.y - arr[b2].position.y;
+          var d = Math.sqrt(dx * dx + dy * dy);
+          var pen = (arr[a].circleRadius + arr[b2].circleRadius) - d;
+          if (pen > 0) { penN++; penSum += pen; if (pen > maxPen) maxPen = pen; }
+        }
+      }
+      console.log('STATE t=' + tick + ' score=' + score + ' n=' + rows.length + ' dead=' + (dead ? 1 : 0) +
+        ' maxpen=' + maxPen.toFixed(1) + ' avgpen=' + (penN ? (penSum / penN).toFixed(1) : '0') + ' penpairs=' + penN +
+        ' | ' + txt);
+    }, 1000);
+  }
+})();
+</script>
+</body>
+</html>

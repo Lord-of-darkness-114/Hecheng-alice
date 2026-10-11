@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#08070a">
+<title>合成爱丽丝</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #08070a; color: #e8e0cc;
+    font-family: Georgia, "Times New Roman", "Songti SC", serif;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    overscroll-behavior: none;
+  }
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #game {
+    display: block; touch-action: none;
+    box-shadow: 0 0 80px rgba(0,0,0,.9), 0 0 30px rgba(0,0,0,.7) inset;
+  }
+  #loading {
+    position: fixed; left: 0; right: 0; bottom: 12px;
+    text-align: center; font-size: 13px; letter-spacing: 1px; color: #6b6350;
+  }
+  /* 开始界面"开始游戏"按钮用的**草书**字体：柳建毛草 Liu Jian Mao Cao（OFL 开源协议，
+     许可证见 assets/fonts/OFL-LiuJianMaoCao.txt）。
+     这是完整 CJK 字体裁出来的子集，只保留需要的 11 个字 → 7.5KB（原字体 4.7MB），
+     所以能随项目分发、也塞得进微信小游戏的包体限制。
+     ★ 想换按钮文字，必须重新裁剪字体（见 交接文档.md 的"草书字体"一节），否则新字会回退到系统字体。 */
+  @font-face {
+    font-family: 'BSLabel';
+    src: url('assets/fonts/bs-label.ttf') format('truetype');
+    font-weight: 400 700;      /* 让 700 也用真字形，避免浏览器做"假粗体"把笔画糊掉 */
+    font-display: block;
+  }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="game" oncontextmenu="return false"></canvas></div>
+<div id="loading">加载中…</div>
+
+<!-- 物理引擎：不用打包工具，直接引本地文件（微信端用 require 引同一份） -->
+<script src="vendor/matter.min.js"></script>
+
+<!-- 共享核心：两端完全相同的这一批文件 -->
+<script src="shared/config.js"></script>
+<script src="shared/audio.js"></script>
+<script src="shared/render.js"></script>
+<script src="shared/physics.js"></script>
+<script src="shared/game.js"></script>
+
+<!-- 网页壳 -->
+<script src="adapter-web.js"></script>
+<script src="audio-web.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
