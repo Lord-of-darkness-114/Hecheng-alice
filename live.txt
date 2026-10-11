@@ -42,7 +42,7 @@
 </head>
 <body>
 <div id="stage"><canvas id="game" oncontextmenu="return false" width="271" height="482" style="width: 271.125px; height: 482px;"></canvas></div>
-<div id="loading" style="display: none;">加载中 100%  (panel)</div>
+<div id="loading" style="display: none;">加载中 100%  (frame)</div>
 
 <!-- 物理引擎：不用打包工具，直接引本地文件（微信端用 require 引同一份） -->
 <script src="vendor/matter.min.js"></script>
@@ -60,7 +60,7 @@
 <script src="main.js"></script>
 
 
-<pre id="selftest" style="position: fixed; left: -9999px; top: 0px;">[SELFTEST] passed=50/50 failed=0
+<pre id="selftest" style="position: fixed; left: -9999px; top: 0px;">[SELFTEST] passed=52/52 failed=0
 [CHECK] PASS 1. 引擎已初始化
 [CHECK] PASS 2. 墙体已创建
 [CHECK] PASS 3. 载入后停在开始界面、且不能投球  {screen=title}
@@ -82,7 +82,7 @@
 [CHECK] PASS 19. 球不会穿墙/穿地板  {escaped=0 lowestY=1233 floorY=1266}
 [CHECK] PASS 20. 穿透量在安全范围（&lt;6px）  {max=0.9 avg=0.3 pairs=3}
 [CHECK] PASS 21. 球堆最终静止  {maxSpeed=0.000}
-[CHECK] PASS 22. 最高分写入后可从存储读回  {wrote=24705 read=24705}
+[CHECK] PASS 22. 最高分写入后可从存储读回  {wrote=12360 read=12360}
 [CHECK] PASS 23. 默认是正常版  {version=normal tier1=艾露玛}
 [CHECK] PASS 24. 正常版第 1 阶是"艾露玛"  {tier1=艾露玛}
 [CHECK] PASS 25. 两套第 1 阶名字不同  {艾露玛 / 吊死鬼}
@@ -99,16 +99,18 @@
 [CHECK] PASS 36. 正常版候选链不会重复自己  {assets/tiers/tier1.png}
 [CHECK] PASS 37. 预加载用的"指定版本"候选链能构造出来  {assets/tiers-hell/tier1.png -&gt; assets/tiers/tier1.png}
 [CHECK] PASS 38. preloadVariant 会把另一个版本的 8 个槽位都占住  {槽位数 = 8}
-[CHECK] PASS 39. 两个版本各有自己的 BGM 文件  {assets/audio/bgm_normal.mp3 / assets/audio/bgm_hell.mp3}
-[CHECK] PASS 40. BGM 版本名写错时回退到正常版  {回退到 assets/audio/bgm_normal.mp3}
-[CHECK] PASS 41. 合成出爱丽丝用的是 merge7 槽位（不是 merge8）  {merge[6] = assets/audio/merge7.mp3}
-[CHECK] PASS 42. 失败音效指向 gameover.mp3  {assets/audio/gameover.mp3}
-[CHECK] PASS 43. 投放古兹会播古兹自己的音效  {merge0 → assets/audio/merge1.mp3}
-[CHECK] PASS 44. 艾露玛没有专属音效（回退通用投放音）  {名称 = ""}
-[CHECK] PASS 45. 越线静止持续超时会判负  {dead=true}
-[CHECK] PASS 46. 重启清空场地
-[CHECK] PASS 47. 渲染一帧无异常
-[CHECK] PASS 48. 插值结果落在两帧之间  {prev=(360.0,220.0) cur=(360.0,220.3) vis=(360.0,220.1)}
-[CHECK] PASS 49. 关闭插值后等于物理位置  {vis=(360.0,220.3) raw=(360.0,220.3)}
-[CHECK] PASS 50. 大量投放后仍稳定  {n=5}
+[CHECK] PASS 39. 音频层提供 whenReady / readyState（加载闸门等 BGM 用）  {whenReady=function readyState=function}
+[CHECK] PASS 40. whenReady 查不存在的音效会立刻回 false（绝不会卡住加载）  {回调 = false}
+[CHECK] PASS 41. 两个版本各有自己的 BGM 文件  {assets/audio/bgm_normal.mp3 / assets/audio/bgm_hell.mp3}
+[CHECK] PASS 42. BGM 版本名写错时回退到正常版  {回退到 assets/audio/bgm_normal.mp3}
+[CHECK] PASS 43. 合成出爱丽丝用的是 merge7 槽位（不是 merge8）  {merge[6] = assets/audio/merge7.mp3}
+[CHECK] PASS 44. 失败音效指向 gameover.mp3  {assets/audio/gameover.mp3}
+[CHECK] PASS 45. 投放古兹会播古兹自己的音效  {merge0 → assets/audio/merge1.mp3}
+[CHECK] PASS 46. 艾露玛没有专属音效（回退通用投放音）  {名称 = ""}
+[CHECK] PASS 47. 越线静止持续超时会判负  {dead=true}
+[CHECK] PASS 48. 重启清空场地
+[CHECK] PASS 49. 渲染一帧无异常
+[CHECK] PASS 50. 插值结果落在两帧之间  {prev=(360.0,220.0) cur=(360.0,220.3) vis=(360.0,220.1)}
+[CHECK] PASS 51. 关闭插值后等于物理位置  {vis=(360.0,220.3) raw=(360.0,220.3)}
+[CHECK] PASS 52. 大量投放后仍稳定  {n=5}
 </pre></body></html>
