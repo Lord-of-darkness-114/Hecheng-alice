@@ -499,7 +499,6 @@
     1: 'kfc全家桶', 2: 'AAAAA杯子批发', 3: '释然了', 4: '触手养殖场',
     5: '至少加起来远超常人寿命不是吗？', 6: '库嘻嘻', 7: '蠕动潜行而来'
   };
-  G.ACHV_HELL_FIRST_NAME = '（地狱·待命名·初次合成）';
   /* 地狱版的"第一次合成出第 N 阶"（镜像正常版那 7 条）—— 用户 2026-10-11 给定，低阶→高阶 */
   G.ACHV_HELL_TIER_NAMES = {
     1: '吮指原味鸡',
@@ -562,14 +561,11 @@
       })(t);
     }
     var mile = [
-      /* 「初次合成」+ 上面那 7 条单局累计：**只有正常版能拿**（用户 2026-10-11 要求） */
+      /* 「初次合成」：**只有正常版能拿**（用户 2026-10-11 要求）。
+       * ★ 2026-10-11 用户又说"地狱版初次合成这个成就可以不要了" → 地狱版那条已删除；
+       *   地狱版仍有自己的 7 条"第一次合成出各阶" + 7 条"一局内合成 N 个"，不缺内容。 */
       { id: 'first_merge', name: '初次合成', desc: '完成第一次合成', icon: 'eye', ver: 'normal',
         test: function (s) { return s.merges >= 1; } },
-      /* 地狱版单独一条对应的（名字待用户给） */
-      { id: 'hell_first_merge', ver: 'hell',
-        name: G.ACHV_HELL_FIRST_NAME || '（地狱·待命名·初次合成）',
-        desc: '在地狱版完成第一次合成', icon: 'eye',
-        test: function (s) { return s.hellMerges >= 1; } },
       { id: 'first_game', name: '第一局', desc: '玩完一局（无论输赢）', icon: 'key',
         test: function (s) { return s.games >= 1; } },
       { id: 'combo3', name: '连锁反应', desc: '一次连击达到 3 连', icon: 'skull',
@@ -639,11 +635,12 @@
   G.BANNER = {
     t: 1.3,                                        // 停留秒数
     y: 0.34,                                       // 纵向位置（屏幕高度比例）
-    hellFont: '700 46px BSRun, STXingkai, STLiti, KaiTi, serif',
+    /* 2026-10-11 用户反馈"字号有些小" → 地狱版 46 → 58px，正常版 40 → 50px，描边同步加粗 */
+    hellFont: '700 58px BSRun, STXingkai, STLiti, KaiTi, serif',
     hellFill: '#d5322c',                           // 字的颜色：红
     hellStroke: '#f6f1e2',                         // 边缘：白色描边
-    hellStrokeW: 7,
-    normalFont: '700 40px ' + G.THEME.fontFamily   // 正常版维持原样
+    hellStrokeW: 8,
+    normalFont: '700 50px ' + G.THEME.fontFamily   // 正常版维持金色字，只调大字号
   };
 
   G.derive();

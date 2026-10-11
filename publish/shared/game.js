@@ -731,14 +731,13 @@
     }
     ok('7 条单局累计成就：门槛准确、正常版与地狱版各算各的', cumOk, cumDetail);
 
-    ok('「初次合成」只有正常版能拿，地狱版另有一条',
+    ok('「初次合成」只有正常版能拿；地狱版已不再单设这条（2026-10-11 用户要求删掉）',
       (function () {
         var s = G.Achv.blankStats(); s.merges = 1; s.hellMerges = 1;
         return G.Achv.newlyUnlocked(s, {}, 'normal').indexOf('first_merge') >= 0
             && G.Achv.newlyUnlocked(s, {}, 'hell').indexOf('first_merge') < 0
-            && G.Achv.newlyUnlocked(s, {}, 'hell').indexOf('hell_first_merge') >= 0
-            && G.Achv.newlyUnlocked(s, {}, 'normal').indexOf('hell_first_merge') < 0;
-      })(), G.Achv.byId('hell_first_merge') ? G.Achv.byId('hell_first_merge').name : '无');
+            && !G.Achv.byId('hell_first_merge');
+      })(), '地狱版还有 7 条首合各阶 + 7 条单局累计');
     ok('成就文案里的角色名覆盖**按版本分流**（正常=莉耶芙 / 地狱=玛丽苏）',
       G.achvFill('{6}', 'normal') === '莉耶芙' && G.achvFill('{6}', 'hell') === '玛丽苏',
       'normal=' + G.achvFill('{6}', 'normal') + ' hell=' + G.achvFill('{6}', 'hell'));
