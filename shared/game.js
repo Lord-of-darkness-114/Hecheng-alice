@@ -536,6 +536,21 @@
     ok('正常版候选链不会重复自己',
       nc.length === 1 && nc[0] === G.ASSETS.tiers[0], nc.join(' -> '));
 
+    // 7c-3) ★ 2026-10-11 加：云端切版本会先闪占位球的修复，两条防线
+    var hcFor = G.texturePathCandidatesFor ? G.texturePathCandidatesFor('hell', 0) : [];
+    ok('预加载用的"指定版本"候选链能构造出来',
+      hcFor.length === 2 && hcFor[0] === 'assets/tiers-hell/tier1.png'
+      && hcFor[1] === 'assets/tiers/tier1.png', hcFor.join(' -> '));
+    ok('preloadVariant 会把另一个版本的 8 个槽位都占住',
+      (function () {
+        if (!G.Render.preloadVariant) return false;
+        G.Render.preloadVariant('hell');
+        var slot = G.Render.textureCache && G.Render.textureCache.hell;
+        return !!slot && Object.keys(slot).length === G.THEME.tiers.length;
+      })(),
+      '槽位数 = ' + (G.Render.textureCache && G.Render.textureCache.hell
+        ? Object.keys(G.Render.textureCache.hell).length : '无'));
+
     // 7d) BGM：两个命名版本各一首，版本名写错要能回退
     ok('两个版本各有自己的 BGM 文件',
       G.bgmPathFor('normal') === 'assets/audio/bgm_normal.mp3'

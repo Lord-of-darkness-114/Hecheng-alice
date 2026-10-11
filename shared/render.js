@@ -93,22 +93,41 @@
      * 否则运行时切换版本会认不出 .webp 这类格式（真图就是 .webp）。 */
     _LOAD_EXTS: ['.webp', '.jpg', '.png', '.jpeg'],
 
-    /* 取当前该用的贴图；没加载过就后台加载一次，先返回 null 走占位画法。
+    /* 取当前该用的贴图；没加载过就后台加载一次，先返回 null（调用方会兜底）。
      * 候选顺序 = G.texturePathCandidates()：当前版本目录 → 默认目录，
      * 全部失败才真的走占位球。 */
     _textureFor: function (tier) {
       var variant = G.textureVariantName();
       if (!this.textureCache) this.textureCache = {};
       if (!this.textureCache[variant]) this.textureCache[variant] = {};
-      var slot = this.textureCache[variant];
+      if (Object.prototype.hasOwnProperty.call(this.textureCache[variant], tier)) {
+        return this.textureCache[variant][tier];
+      }
+      this._loadTexture(variant, tier);     // 发起加载，本次先返回 null
+      return null;
+    },
 
+    /* 真正发起一次贴图加载（内部用）。variant 是**显式传入**的版本名，不读当前版本 ——
+     * 这样 preloadVariant() 才能提前下载"另一个"版本。
+     * pending 计数用于知道"这个版本还在下载中"。 */
+    _loadTexture: function (variant, tier) {
+      if (!this.textureCache) this.textureCache = {};
+      if (!this.textureCache[variant]) this.textureCache[variant] = {};
+      var slot = this.textureCache[variant];
       if (Object.prototype.hasOwnProperty.call(slot, tier)) return slot[tier];
       slot[tier] = null;                       // 先占坑，避免每帧重复发起加载
 
-      if (typeof root === 'undefined' || !root.Image) return null;
+      if (!this._pending) this._pending = {};
+      this._pending[variant] = (this._pending[variant] || 0) + 1;
+      var self = this;
+      var settle = function () {
+        self._pending[variant] = Math.max(0, (self._pending[variant] || 1) - 1);
+      };
 
-      var dirs = G.texturePathCandidates ? G.texturePathCandidates(tier)
-                                         : [G.texturePathFor(tier)];
+      if (typeof root === 'undefined' || !root.Image) { settle(); return null; }
+
+      var dirs = G.texturePathCandidatesFor ? G.texturePathCandidatesFor(variant, tier)
+                                            : [G.texturePathFor(tier)];
       var tries = [];
       for (var d = 0; d < dirs.length; d++) {
         var u = dirs[d];
@@ -123,13 +142,13 @@
         if (tries.indexOf(u) < 0) tries.push(u);
       }
 
-      var self = this;
       var k = 0;
       var next = function () {
-        if (k >= tries.length) { slot[tier] = null; return; }   // 全都没有 -> 占位球
+        if (k >= tries.length) { slot[tier] = null; settle(); return; }  // 全都没有 -> 占位球
         var img = new root.Image();
         img.onload = function () {
           slot[tier] = img;
+          settle();
           if (variant === G.textureVariantName() && self.textures[tier]) {
             self.textures[tier].img = img;
           }
@@ -139,6 +158,20 @@
       };
       next();
       return null;
+    },
+
+    /* 某个版本的贴图还在下载吗？（想给玩家显示"贴图加载中"时可用） */
+    variantPending: function (version) {
+      return !!(this._pending && this._pending[version] > 0);
+    },
+
+    /* 提前把**另一个**命名版本的球体贴图也悄悄下载好。
+     * ★ 2026-10-11 加：以前切换版本时才开始下载，云端第一次访问会先看到占位球。
+     *   由 web/main.js 在首批素材加载完后调用（不 await，不阻塞开始界面）。 */
+    preloadVariant: function (version) {
+      if (!version || version === G.textureVariantName()) return this;
+      for (var i = 0; i < G.THEME.tiers.length; i++) this._loadTexture(version, i);
+      return this;
     },
 
     /* 占位球体画法：径向渐变 + 描边 + 高光，模拟球面光照。
@@ -176,7 +209,9 @@
     drawBall: function (cx, cy, tier, radius, angle, alpha) {
       var c = this.ctx;
       var tex = this.textures[tier];
-      var img = this._textureFor(tier);          // 当前版本的贴图；没加载好则返回 null
+      // 当前版本的贴图；**还没下载好**（云端第一次切版本时）就退回"已经加载过的那张"，
+      // 最后才退回占位球 —— 否则切版本会闪一下代码画的占位小球（2026-10-11 修）
+      var img = this._textureFor(tier) || (tex && tex.img) || null;
       if (alpha == null) alpha = 1;
       if (alpha < 1) { c.save(); c.globalAlpha = alpha; }
 

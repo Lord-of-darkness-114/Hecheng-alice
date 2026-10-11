@@ -338,9 +338,8 @@
    *   导致切到地狱版后 8 张图全部 404、退回占位球。
    * ★ 这条链**两个加载器都要走**：web/main.js 的预加载 + render.js 的懒加载
    *   （切换版本时不重新预加载，只有懒加载会跑）。 */
-  G.texturePathCandidates = function (tier) {
+  G.texturePathCandidatesFor = function (v, tier) {
     var out = [];
-    var v = G.textureVariantName();
     var spec = G.TEXTURE_VARIANTS[v];
     var def = G.TEXTURE_VARIANTS[G.TEXTURE_VARIANT_FALLBACK];
     if (spec && spec.dir) out.push(spec.dir + '/tier' + (tier + 1) + '.png');
@@ -352,6 +351,13 @@
       out.push(G.ASSETS.tiers[tier]);
     }
     return out;
+  };
+
+  /* 同上，但**显式指定贴图版本**（不读当前版本）。
+   * ★ 2026-10-11 加：云端第一次访问时切版本会先看到占位球，原因是懒加载那时才开始下载。
+   *   render.js 的 preloadVariant() 用这个函数提前把**另一个版本**也下下来。 */
+  G.texturePathCandidates = function (tier) {
+    return G.texturePathCandidatesFor(G.textureVariantName(), tier);
   };
 
   /* 界面上的排列顺序 + 默认选中哪个（用户要求默认"正常版"） */
