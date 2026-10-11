@@ -82,10 +82,26 @@
     } catch (e) { return Promise.resolve(); }
   }
 
+  /* 等 BGM 加载到"可以立刻播"（用户 2026-10-11 要求：BGM 没好就不进开始界面）。
+   * 失败或超时也放行 —— 绝不能因为一首曲子卡住进不去。
+   * （定时器放在这一层：共享层 shared/ 要保持平台无关，不放 setTimeout。） */
+  function awaitBgm(timeoutMs) {
+    return new Promise(function (resolve) {
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; resolve('timeout'); } },
+                         timeoutMs || 15000);
+      function fin(how) { if (done) return; done = true; clearTimeout(t); resolve(how); }
+      try {
+        if (G.Sound && G.Sound.whenReady) G.Sound.whenReady('bgm', fin);
+        else fin('no-api');
+      } catch (e) { fin('error'); }
+    });
+  }
+
   function loadAll(report) {
     var jobs = [];
     var tierCount = G.THEME.tiers.length;
-    var total = tierCount + 3;   // 球 + bg + panel + frame
+    var total = tierCount + 4;   // 球 + bg + panel + frame + BGM
     var done = 0;
     function tick(label) {
       done++;
@@ -115,6 +131,8 @@
       if (img) G.Render.images.frame = img;
       tick('frame');
     }));
+    // BGM：★ 2026-10-11 用户要求"等 BGM 也加载好才进开始界面"
+    jobs.push(awaitBgm().then(function () { tick('音乐'); }));
 
     return Promise.all(jobs);
   }
@@ -195,6 +213,11 @@
       if (loading) loading.textContent = '加载中 ' + Math.round(p * 100) + '%  (' + label + ')';
     }).then(loadFonts).then(function () {
       if (loading) loading.style.display = 'none';
+      /* 记录"进开始界面那一刻"的状态，供探针验证 BGM 确实已经加载好 */
+      root.__boot = {
+        ms: Math.round(performance.now()),
+        bgmReady: G.Sound.readyState ? G.Sound.readyState('bgm') : -1
+      };
       root.__gameLoopHook = function () {
         frameCount++;
         frameTimes.push(Math.round(performance.now()));
@@ -223,6 +246,25 @@
           if (tv) G.Render.preloadVariant(tv);
         }
       }
+      /* 后台把**另一个版本**的 BGM 也悄悄下下来（切版本时就不用等）。
+       * 慢网（2G）跳过，别抢带宽；引用存起来避免被回收。 */
+      try {
+        var conn = root.navigator && root.navigator.connection;
+        var slowNet = conn && /(^|-)2g$/.test(conn.effectiveType || '');
+        if (!slowNet && G.bgmPathFor && G.NAME_VERSION_ORDER) {
+          var curBgm = G.bgmPathFor(G.nameVersion);
+          for (var bi = 0; bi < G.NAME_VERSION_ORDER.length; bi++) {
+            var bu = G.bgmPathFor(G.NAME_VERSION_ORDER[bi]);
+            if (bu && bu !== curBgm) {
+              var warm = new root.Audio();
+              warm.preload = 'auto';
+              warm.src = bu;
+              root.__bgmWarm = root.__bgmWarm || [];
+              root.__bgmWarm.push(warm);
+            }
+          }
+        }
+      } catch (e) { /* 静默 */ }
       // 看门狗必须在主循环开始之后再启动：加载期间一帧都没有，
       // 提前启动会让它把"还没开始渲染"误判成"rAF 不派发"
       ad.startFrameWatchdog();

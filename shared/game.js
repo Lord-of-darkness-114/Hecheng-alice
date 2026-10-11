@@ -551,6 +551,15 @@
       '槽位数 = ' + (G.Render.textureCache && G.Render.textureCache.hell
         ? Object.keys(G.Render.textureCache.hell).length : '无'));
 
+    // 7c-4) ★ 2026-10-11 加：用户要求"等 BGM 也加载好才进开始界面"的接口
+    ok('音频层提供 whenReady / readyState（加载闸门等 BGM 用）',
+      typeof G.Sound.whenReady === 'function' && typeof G.Sound.readyState === 'function',
+      'whenReady=' + typeof G.Sound.whenReady + ' readyState=' + typeof G.Sound.readyState);
+    var readyCb = 'not-called';
+    G.Sound.whenReady('不存在的音效', function (r) { readyCb = r; });
+    ok('whenReady 查不存在的音效会立刻回 false（绝不会卡住加载）',
+      readyCb === false, '回调 = ' + readyCb);
+
     // 7d) BGM：两个命名版本各一首，版本名写错要能回退
     ok('两个版本各有自己的 BGM 文件',
       G.bgmPathFor('normal') === 'assets/audio/bgm_normal.mp3'
