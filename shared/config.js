@@ -493,6 +493,13 @@
     7: '（地狱·待命名7阶）'
   };
   G.ACHV_HELL_FIRST_NAME = '（地狱·待命名·初次合成）';
+  /* 地狱版的"第一次合成出第 N 阶"（镜像正常版那 7 条）—— 同样先占位 */
+  G.ACHV_HELL_TIER_NAMES = {
+    1: '（地狱·待命名·首合一阶）', 2: '（地狱·待命名·首合二阶）',
+    3: '（地狱·待命名·首合三阶）', 4: '（地狱·待命名·首合四阶）',
+    5: '（地狱·待命名·首合五阶）', 6: '（地狱·待命名·首合六阶）',
+    7: '（地狱·待命名·首合七阶）'
+  };
 
   G.ACHIEVEMENTS = (function () {
     var tierList = [];
@@ -501,13 +508,24 @@
       (function (idx) {
         var icon = G.ACHV_TIER_ICONS[idx] || 'eye';
         var cumN = G.ACHV_CUM_THRESHOLDS[idx];
-        /* ① 合出这个角色（两种命名版本都能拿） */
+        /* ① 第一次合成出这个角色 —— **只有正常版能拿**（数据也用正常版专用的）
+         *    地狱版有自己的一条（下面 ①'），名字待用户给 */
         tierList.push({
           id: 'tier_' + idx,
+          ver: 'normal',
           name: G.ACHV_TIER_NAMES[idx] || ('合成出{' + idx + '}'),
           desc: '把两个{' + (idx - 1) + '}合成在一起',
           icon: icon,
-          test: function (s) { return s.tierMerges[idx] >= 1; }
+          test: function (s) { return s.tierMergesNormal[idx] >= 1; }
+        });
+        /* ①' 地狱版对应的那条（同一图标，说明用地狱版角色名） */
+        tierList.push({
+          id: 'hell_tier_' + idx,
+          ver: 'hell',
+          name: G.ACHV_HELL_TIER_NAMES[idx] || ('（地狱·待命名·首合' + idx + '阶）'),
+          desc: '在地狱版第一次合成出{' + idx + '}',
+          icon: icon,
+          test: function (s) { return s.tierMergesHell[idx] >= 1; }
         });
         /* ② 一局内合成出 N 个（**只在正常版能拿**） */
         if (cumN) {

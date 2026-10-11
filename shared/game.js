@@ -655,10 +655,10 @@
     ok('已解锁的不会重复解锁',
       G.Achv.newlyUnlocked(s1, { first_merge: 1 }).indexOf('first_merge') < 0, '');
     var topIdx = G.THEME.tiers.length - 1;
-    var s2 = G.Achv.blankStats(); s2.tierMerges[topIdx] = 1;
+    var s2 = G.Achv.blankStats(); s2.tierMergesNormal[topIdx] = 1;
     ok('合出最高阶角色会解锁对应角色成就',
-      G.Achv.newlyUnlocked(s2, {}).indexOf('tier_' + topIdx) >= 0,
-      G.Achv.newlyUnlocked(s2, {}).join(','));
+      G.Achv.newlyUnlocked(s2, {}, 'normal').indexOf('tier_' + topIdx) >= 0,
+      G.Achv.newlyUnlocked(s2, {}, 'normal').join(','));
     var back = G.Achv.parse(G.Achv.serialize({ merges: 7 }, { first_merge: 123 }));
     ok('成就存档能原样读回',
       back.stats.merges === 7 && back.unlocked.first_merge === 123, JSON.stringify(back));
@@ -739,12 +739,26 @@
             && G.Achv.newlyUnlocked(s, {}, 'hell').indexOf('hell_first_merge') >= 0
             && G.Achv.newlyUnlocked(s, {}, 'normal').indexOf('hell_first_merge') < 0;
       })(), G.Achv.byId('hell_first_merge') ? G.Achv.byId('hell_first_merge').name : '无');
-    ok('成就文案里的角色名覆盖生效（6 阶在成就里叫「莉耶芙」）',
-      G.achvFill('{6}', 'normal') === '莉耶芙' && G.achvFill('{6}', 'hell') === '莉耶芙',
+    ok('成就文案里的角色名覆盖生效（6 阶在成就里叫「莉耶芙」）',      G.achvFill('{6}', 'normal') === '莉耶芙' && G.achvFill('{6}', 'hell') === '莉耶芙',
       G.achvFill('{6}'));
     ok('伊丽莎白那条已改名为「魂之贵夫人」',
       G.Achv.byId('tier_3') && G.Achv.byId('tier_3').name === '魂之贵夫人',
       G.Achv.byId('tier_3') ? G.Achv.byId('tier_3').name : '无');
+    ok('"第一次合成出各阶"也是两套（正常/地狱各 7 条、数据分开）',
+      (function () {
+        for (var ti2 = 1; ti2 < G.THEME.tiers.length; ti2++) {
+          var a2 = G.Achv.byId('tier_' + ti2), b2 = G.Achv.byId('hell_tier_' + ti2);
+          if (!a2 || !b2 || a2.ver !== 'normal' || b2.ver !== 'hell') return false;
+          var sn = G.Achv.blankStats(); sn.tierMergesNormal[ti2] = 1;
+          if (G.Achv.newlyUnlocked(sn, {}, 'normal').indexOf('tier_' + ti2) < 0) return false;
+          if (G.Achv.newlyUnlocked(sn, {}, 'hell').indexOf('hell_tier_' + ti2) >= 0) return false;
+          var sh = G.Achv.blankStats(); sh.tierMergesHell[ti2] = 1;
+          if (G.Achv.newlyUnlocked(sh, {}, 'hell').indexOf('hell_tier_' + ti2) < 0) return false;
+          if (G.Achv.newlyUnlocked(sh, {}, 'normal').indexOf('tier_' + ti2) >= 0) return false;
+        }
+        return true;
+      })(),
+      '正常版 ' + G.Achv.byId('tier_1').name + ' / 地狱版占位 ' + G.Achv.byId('hell_tier_1').name);
     var sHell = G.Achv.blankStats(); sHell.hellGames = 1;
     ok('在地狱版玩一局会解锁「另一个世界」',
       G.Achv.newlyUnlocked(sHell, {}, 'hell').indexOf('hell_world') >= 0, '');

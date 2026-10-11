@@ -248,6 +248,8 @@
           // 「一局内 N 个」的两套统计（正常版 / 地狱版）都要抬到门槛
           st.gameTierNormal[ti] = Math.max(st.gameTierNormal[ti], cumNeed);
           st.gameTierHell[ti] = Math.max(st.gameTierHell[ti], cumNeed);
+          st.tierMergesNormal[ti] = Math.max(st.tierMergesNormal[ti], 1);
+          st.tierMergesHell[ti] = Math.max(st.tierMergesHell[ti], 1);
         }
         G.Achv.save();
       }

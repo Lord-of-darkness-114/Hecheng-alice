@@ -30,8 +30,12 @@
       hellGames: 0,     // 在地狱版开局的次数（「另一个世界」）
       hellMerges: 0,    // 在地狱版合成过的次数（地狱版那条「初次合成」）
       allTiersInOneGame: 0,   // 有没有过"单局集齐 7 个角色"（0/1，「全图鉴」）
-      tierMerges: [0, 0, 0, 0, 0, 0, 0, 0],        // 合成出第 N 阶（0 起索引）的次数（跨局累计）
-      /* 「一局内合成出 N 个某角色」用：**单局最高**次数，按命名版本分开记 */
+      tierMerges: [0, 0, 0, 0, 0, 0, 0, 0],        // 合成出第 N 阶（0 起索引）的次数（跨局累计，不分版本）
+      /* 下面这些按**命名版本**分开记（用户 2026-10-11 要求"两套各算各的"）：
+       *   tierMergesNormal/Hell = 该版本下累计合成出第 N 阶的次数（"第一次合成出 N 阶"用）
+       *   gameTierNormal/Hell   = 该版本下**单局最高**合成出第 N 阶的次数（"一局内 N 个"用） */
+      tierMergesNormal: [0, 0, 0, 0, 0, 0, 0, 0],
+      tierMergesHell: [0, 0, 0, 0, 0, 0, 0, 0],
       gameTierNormal: [0, 0, 0, 0, 0, 0, 0, 0],
       gameTierHell: [0, 0, 0, 0, 0, 0, 0, 0]
     };
@@ -183,10 +187,12 @@
     noteGameTier: function (version, tier, countInGame) {
       var v = (version === 'hell') ? 'hell' : 'normal';
       var arr = (v === 'hell') ? this.stats.gameTierHell : this.stats.gameTierNormal;
-      if (typeof tier === 'number' && tier >= 0 && tier < arr.length
-          && typeof countInGame === 'number' && countInGame > arr[tier]) {
-        arr[tier] = countInGame;
+      var life = (v === 'hell') ? this.stats.tierMergesHell : this.stats.tierMergesNormal;
+      var ok = (typeof tier === 'number' && tier >= 0 && tier < arr.length);
+      if (ok && typeof countInGame === 'number' && countInGame > arr[tier]) {
+        arr[tier] = countInGame;                 // 单局最高次数
       }
+      if (ok && life) life[tier]++;              // 该版本的累计次数（"第一次合成出 N 阶"用）
       if (v === 'hell') this.stats.hellMerges++;
       return this.check(v);
     },
