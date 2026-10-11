@@ -185,6 +185,7 @@
           id: a.id,
           name: fill(a.name),
           desc: fill(a.desc),
+          icon: a.icon || 'eye',          // 图标类型（画法见 render.js 的 _achvIcon）
           prog: prog,
           unlocked: !!this.unlocked[a.id]
         });

@@ -305,7 +305,7 @@
         this.achvToast.t -= dt;
         if (this.achvToast.t <= 0 && this.achvToasts.length) {
           var nxt = this.achvToasts.shift();
-          this.achvToast = { name: nxt.name, desc: nxt.desc,
+          this.achvToast = { name: nxt.name, desc: nxt.desc, icon: nxt.icon,
                              t: (G.ACHV_UI && G.ACHV_UI.toastMs) || 3.4 };
         }
       }
@@ -805,8 +805,7 @@
       //     "角色版本 · 决定 BGM" 标签）已按用户要求**全部去掉**。
       // —— 底部"成就"入口（显示已解锁进度）+ 版本切换胶囊 + 组装命中区 ——
       var achvRect = this.achvTitleRect();
-      var achvLabel = '成就 ' + (G.Achv ? G.Achv.count() : 0) + '/' + (G.Achv ? G.Achv.total() : 0);
-      this._chip(c, achvRect.x, achvRect.y, achvRect.w, achvRect.h, achvLabel, false, 18);
+      this._drawAchvEntry(c, achvRect);
       var picks = this._drawVersionPicker(c);
       this.hits = picks.concat([this.titleStartRect(), achvRect]);
     },
@@ -815,13 +814,16 @@
      * 开始界面底部一个"成就 n/N"胶囊进入；面板里一条条列出（可上下拖动滚动）。
      * 未解锁压暗 + 显示进度；已解锁金色 + ★。
      * ------------------------------------------ */
+    /* 开始界面底部入口的命中区（几何来自 G.ACHV_UI.entry*：面积约原来 2 倍，
+     * 位置挪到"开始游戏"按钮正下方；绘制见 _drawAchvEntry） */
     achvTitleRect: function () {
-      var w = 168, h = 40;
-      var x = (G.DESIGN.w - w) / 2, y = G.DESIGN.h - 108;
+      var UI = G.ACHV_UI;
+      var w = UI.entryW, h = UI.entryH;
+      var x = (G.DESIGN.w - w) / 2, y = UI.entryY;
       return {
         action: 'achv', label: '成就',
-        x: x, y: y, w: w, h: h, fontPx: 18,
-        hitX: x - 14, hitY: y - 14, hitW: w + 28, hitH: h + 28
+        x: x, y: y, w: w, h: h, fontPx: 22,
+        hitX: x - 16, hitY: y - 16, hitW: w + 32, hitH: h + 32
       };
     },
 
@@ -845,24 +847,179 @@
     },
     achvDragEnd: function () { this._achvDrag = null; return this; },
 
+    /* ---------------- 成就图标（代码画的） ----------------
+     * 配色参考背景里的狮子/独角兽/骷髅：**惨白骨色为主 + 一点血红**。
+     * kind: eye / egg / cup / apple / skull / key
+     * on: 已解锁 = 骨白实心 + 血红点缀；未解锁 = 暗淡描边
+     * ------------------------------------------------------ */
+    iconOf: function (def) {
+      var k = def && def.icon;
+      return (G.ACHV_ICONS && G.ACHV_ICONS.indexOf(k) >= 0) ? k : 'eye';
+    },
+
+    _achvIcon: function (c, kind, cx, cy, r, on) {
+      var C = G.ACHV_COLORS;
+      var line = on ? C.bone : C.boneDim;
+      var fill = on ? C.bone : 'rgba(214,206,182,.14)';
+      var accent = on ? C.bloodBright : 'rgba(149,32,42,.45)';
+      c.save();
+      c.lineWidth = Math.max(1.6, r * 0.14);
+      c.lineJoin = 'round';
+      c.strokeStyle = line;
+      c.fillStyle = fill;
+
+      if (kind === 'egg') {
+        c.beginPath();
+        c.ellipse(cx, cy, r * 0.74, r, 0, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+        c.beginPath();
+        c.moveTo(cx - r * 0.4, cy - r * 0.55);
+        c.lineTo(cx + r * 0.06, cy - r * 0.06);
+        c.lineTo(cx - r * 0.3, cy + r * 0.12);
+        c.lineTo(cx + r * 0.3, cy + r * 0.7);
+        c.strokeStyle = accent;
+        c.stroke();
+      } else if (kind === 'cup') {
+        c.beginPath();
+        c.moveTo(cx - r * 0.72, cy - r * 0.5);
+        c.lineTo(cx + r * 0.72, cy - r * 0.5);
+        c.lineTo(cx + r * 0.5, cy + r * 0.6);
+        c.quadraticCurveTo(cx, cy + r * 0.86, cx - r * 0.5, cy + r * 0.6);
+        c.closePath();
+        c.fill(); c.stroke();
+        c.beginPath();
+        c.moveTo(cx + r * 0.7, cy - r * 0.3);
+        c.quadraticCurveTo(cx + r * 1.16, cy, cx + r * 0.7, cy + r * 0.28);
+        c.strokeStyle = line;
+        c.stroke();
+        c.beginPath();
+        c.moveTo(cx - r * 0.52, cy - r * 0.5);
+        c.lineTo(cx + r * 0.52, cy - r * 0.5);
+        c.strokeStyle = accent;
+        c.lineWidth = Math.max(2, r * 0.24);
+        c.stroke();
+      } else if (kind === 'apple') {
+        c.beginPath();
+        c.arc(cx, cy + r * 0.12, r * 0.82, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+        c.beginPath();
+        c.moveTo(cx, cy - r * 0.68); c.lineTo(cx + r * 0.08, cy - r * 1.18);
+        c.strokeStyle = line;
+        c.stroke();
+        c.beginPath();
+        c.ellipse(cx + r * 0.44, cy - r * 0.96, r * 0.34, r * 0.16, -0.5, 0, Math.PI * 2);
+        c.fillStyle = accent;
+        c.fill();
+      } else if (kind === 'skull') {
+        c.beginPath();
+        c.arc(cx, cy - r * 0.18, r * 0.82, Math.PI * 0.92, Math.PI * 0.08);
+        c.quadraticCurveTo(cx + r * 0.62, cy + r * 0.72, cx + r * 0.3, cy + r * 0.78);
+        c.lineTo(cx - r * 0.3, cy + r * 0.78);
+        c.quadraticCurveTo(cx - r * 0.62, cy + r * 0.72, cx - r * 0.82, cy - r * 0.18);
+        c.closePath();
+        c.fill(); c.stroke();
+        c.fillStyle = accent;
+        c.beginPath(); c.arc(cx - r * 0.34, cy - r * 0.2, r * 0.22, 0, Math.PI * 2); c.fill();
+        c.beginPath(); c.arc(cx + r * 0.34, cy - r * 0.2, r * 0.22, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = on ? 'rgba(20,14,12,.78)' : line;
+        c.lineWidth = Math.max(1.2, r * 0.1);
+        for (var ti = -1; ti <= 1; ti++) {
+          c.beginPath();
+          c.moveTo(cx + ti * r * 0.24, cy + r * 0.44);
+          c.lineTo(cx + ti * r * 0.24, cy + r * 0.76);
+          c.stroke();
+        }
+      } else if (kind === 'key') {
+        c.beginPath(); c.arc(cx, cy - r * 0.5, r * 0.44, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+        c.beginPath();
+        c.moveTo(cx, cy - r * 0.06); c.lineTo(cx, cy + r);
+        c.strokeStyle = line;
+        c.stroke();
+        c.beginPath();
+        c.moveTo(cx, cy + r * 0.5); c.lineTo(cx + r * 0.44, cy + r * 0.5);
+        c.moveTo(cx, cy + r * 0.88); c.lineTo(cx + r * 0.34, cy + r * 0.88);
+        c.stroke();
+        c.beginPath(); c.arc(cx, cy - r * 0.5, r * 0.17, 0, Math.PI * 2);
+        c.fillStyle = accent; c.fill();
+      } else {
+        /* 默认：杏仁眼 + 血红瞳孔（最贴合这个游戏的调子） */
+        c.beginPath();
+        c.moveTo(cx - r, cy);
+        c.quadraticCurveTo(cx, cy - r * 0.96, cx + r, cy);
+        c.quadraticCurveTo(cx, cy + r * 0.96, cx - r, cy);
+        c.closePath();
+        c.fill(); c.stroke();
+        c.beginPath();
+        c.arc(cx, cy, r * 0.36, 0, Math.PI * 2);
+        c.fillStyle = accent;
+        c.fill();
+      }
+      c.restore();
+    },
+
+    /* 文字太长就自动缩字号（保底 minPx）—— 比如那条超长的"爱丽丝…"成就名 */
+    _achvFitText: function (c, text, maxW, basePx, minPx) {
+      var px = basePx, min = minPx || 12;
+      c.font = '700 ' + px + 'px ' + G.THEME.fontFamily;
+      while (px > min && c.measureText(text).width > maxW) {
+        px -= 1;
+        c.font = '700 ' + px + 'px ' + G.THEME.fontFamily;
+      }
+      return px;
+    },
+
+    /* 开始界面底部入口：骨白描边 + 血红点缀 + 小图标（面积约原来的 2 倍） */
+    _drawAchvEntry: function (c, rect) {
+      var C = G.ACHV_COLORS;
+      var got = G.Achv ? G.Achv.count() : 0;
+      var all = G.Achv ? G.Achv.total() : 0;
+      c.beginPath();
+      this.roundRect(c, rect.x, rect.y, rect.w, rect.h, 10);
+      c.fillStyle = 'rgba(12,8,9,.62)';
+      c.fill();
+      c.lineWidth = 1.8;
+      c.strokeStyle = C.borderOn;
+      c.stroke();
+      // 左侧血红竖条
+      c.beginPath();
+      this.roundRect(c, rect.x + 10, rect.y + rect.h / 2 - 13, 3, 26, 1.5);
+      c.fillStyle = C.blood;
+      c.fill();
+      // 小图标（眼睛）
+      this._achvIcon(c, 'eye', rect.x + 44, rect.y + rect.h / 2, 11, got > 0);
+      // 文字
+      c.textAlign = 'left';
+      c.textBaseline = 'middle';
+      c.font = '700 22px ' + G.THEME.fontFamily;
+      c.fillStyle = C.bone;
+      c.fillText('成就', rect.x + 70, rect.y + rect.h / 2 + 1);
+      c.font = '700 20px ' + G.THEME.fontFamily;
+      c.fillStyle = got > 0 ? C.bloodBright : C.boneDim;
+      c.textAlign = 'right';
+      c.fillText(got + ' / ' + all, rect.x + rect.w - 18, rect.y + rect.h / 2 + 1);
+      c.textAlign = 'center';
+      c.textBaseline = 'alphabetic';
+    },
+
     /* 解锁一条成就：顶部弹提示条（同时解锁多条会排队依次弹） */
     showAchievement: function (def) {
       if (!def) return this;
       var fill = G.achvFill || function (t) { return t; };
-      var item = { name: fill(def.name), desc: fill(def.desc) };
+      var item = { name: fill(def.name), desc: fill(def.desc), icon: this.iconOf(def) };
       if (this.achvToast.t > 0) this.achvToasts.push(item);
       else this.achvToast = {
-        name: item.name, desc: item.desc,
+        name: item.name, desc: item.desc, icon: item.icon,
         t: (G.ACHV_UI && G.ACHV_UI.toastMs) || 3.4
       };
       return this;
     },
 
-    /* 成就解锁提示条：开头 0.4 秒滑入，最后 0.5 秒淡出 */
+    /* 成就解锁提示条：开头 0.4 秒滑入，最后 0.5 秒淡出（骨白 + 血红） */
     _drawAchvToast: function (c) {
       var T = this.achvToast;
       if (!T || T.t <= 0) return;
-      var D = G.DESIGN, C = G.THEME.colors;
+      var D = G.DESIGN, K = G.ACHV_COLORS;
       var total = (G.ACHV_UI && G.ACHV_UI.toastMs) || 3.4;
       var alpha = Math.min(1, T.t / 0.5);
       var slide = Math.min(1, Math.max(0, (total - T.t) / 0.4));
@@ -872,37 +1029,49 @@
       c.save();
       c.globalAlpha = alpha;
       c.beginPath();
-      this.roundRect(c, x, y, w, 78, 12);
-      c.fillStyle = 'rgba(10,7,4,.90)';
+      this.roundRect(c, x, y, w, 84, 12);
+      c.fillStyle = 'rgba(8,5,5,.92)';
       c.fill();
-      c.lineWidth = 2;
-      c.strokeStyle = C.gold;
+      c.lineWidth = 1.8;
+      c.strokeStyle = K.borderOn;
       c.stroke();
-      c.textAlign = 'center';
-      c.font = '14px ' + G.THEME.fontFamily;
-      c.fillStyle = C.dim;
-      c.fillText('★ 成就解锁', D.w / 2, y + 26);
-      c.font = '700 26px ' + G.THEME.fontFamily;
-      c.fillStyle = C.goldBright;
-      c.fillText(T.name, D.w / 2, y + 58);
+      // 左侧血红竖条
+      c.beginPath();
+      this.roundRect(c, x + 10, y + 16, 3, 52, 1.5);
+      c.fillStyle = K.blood;
+      c.fill();
+      // 图标
+      this._achvIcon(c, T.icon || 'eye', x + 54, y + 42, 17, true);
+      // 文字
+      c.textAlign = 'left';
+      c.font = '13px ' + G.THEME.fontFamily;
+      c.fillStyle = K.boneDim;
+      c.fillText('成就解锁', x + 88, y + 30);
+      this._achvFitText(c, T.name, w - 108, 24, 12);
+      c.fillStyle = K.boneBright;
+      c.fillText(T.name, x + 88, y + 62);
       c.restore();
       c.textAlign = 'center';
     },
 
     _drawAchvPanel: function (c, nowMs) {
-      var D = G.DESIGN, C = G.THEME.colors, UI = G.ACHV_UI;
+      var D = G.DESIGN, UI = G.ACHV_UI, K = G.ACHV_COLORS;
       var rows = (G.Achv && G.Achv.rows) ? G.Achv.rows() : [];
       var got = (G.Achv && G.Achv.count) ? G.Achv.count() : 0;
 
-      c.fillStyle = 'rgba(4,3,6,.74)';
+      c.fillStyle = 'rgba(6,3,4,.78)';
       c.fillRect(0, 0, D.w, D.h);
 
+      // 标题：骨白 + 血红辉光
       c.textAlign = 'center';
       c.font = '700 38px ' + G.THEME.fontFamily;
-      c.fillStyle = C.goldBright;
+      c.shadowColor = 'rgba(149,32,42,.85)';
+      c.shadowBlur = 16;
+      c.fillStyle = K.boneBright;
       c.fillText('成 就  ' + got + ' / ' + rows.length, D.w / 2, UI.top - 30);
+      c.shadowBlur = 0;
       c.font = '14px ' + G.THEME.fontFamily;
-      c.fillStyle = C.dim;
+      c.fillStyle = K.boneDim;
       c.fillText('拖动列表可上下滚动', D.w / 2, UI.top - 6);
 
       var listTop = UI.top + 14;
@@ -918,6 +1087,7 @@
       c.clip();
 
       var px = (D.w - UI.panelW) / 2;
+      var nameX = px + 78;
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
         var y = listTop + i * (rowH + gap) - this.achvScroll;
@@ -925,28 +1095,41 @@
 
         c.beginPath();
         this.roundRect(c, px, y, UI.panelW, rowH, 10);
-        c.fillStyle = r.unlocked ? 'rgba(201,162,39,.16)' : 'rgba(0,0,0,.42)';
+        c.fillStyle = r.unlocked ? K.rowOn : K.rowOff;
         c.fill();
         c.lineWidth = r.unlocked ? 1.6 : 1;
-        c.strokeStyle = r.unlocked ? C.gold : 'rgba(140,130,102,.40)';
+        c.strokeStyle = r.unlocked ? K.borderOn : K.borderOff;
         c.stroke();
 
+        // 已解锁：左侧一条血红竖条
+        if (r.unlocked) {
+          c.beginPath();
+          this.roundRect(c, px + 6, y + 12, 3, rowH - 24, 1.5);
+          c.fillStyle = K.blood;
+          c.fill();
+        }
+
+        // 图标（惨白+血红，代码画的）
+        this._achvIcon(c, r.icon || 'eye', px + 44, y + rowH / 2,
+                       (UI.icon || 30) / 2, !!r.unlocked);
+
+        // 名字：太长自动缩字号（那条超长的"爱丽丝…"）
         c.textAlign = 'left';
-        c.font = '22px ' + G.THEME.fontFamily;
-        c.fillStyle = r.unlocked ? C.goldBright : 'rgba(140,130,102,.55)';
-        c.fillText(r.unlocked ? '★' : '☆', px + 16, y + rowH / 2 + 8);
+        var nameMaxW = UI.panelW - 78 - (r.prog ? 96 : 20);
+        this._achvFitText(c, r.name, nameMaxW, 22, 12);
+        c.fillStyle = r.unlocked ? K.boneBright : K.boneDim;
+        c.fillText(r.name, nameX, y + 27);
 
-        c.font = '700 22px ' + G.THEME.fontFamily;
-        c.fillStyle = r.unlocked ? C.goldBright : C.dim;
-        c.fillText(r.name, px + 52, y + 27);
+        // 说明
         c.font = '13px ' + G.THEME.fontFamily;
-        c.fillStyle = r.unlocked ? 'rgba(232,224,204,.85)' : 'rgba(140,130,102,.70)';
-        c.fillText(r.desc, px + 52, y + 49);
+        c.fillStyle = r.unlocked ? 'rgba(230,223,200,.68)' : 'rgba(170,162,140,.52)';
+        c.fillText(r.desc, nameX, y + 49);
 
+        // 进度
         if (r.prog) {
           c.textAlign = 'right';
           c.font = '16px ' + G.THEME.fontFamily;
-          c.fillStyle = r.unlocked ? C.gold : 'rgba(140,130,102,.75)';
+          c.fillStyle = r.unlocked ? K.bloodBright : K.boneDim;
           c.fillText(r.prog, px + UI.panelW - 16, y + rowH / 2 + 6);
         }
       }
@@ -959,14 +1142,26 @@
         var barY = listTop + (trackH - barH) * (this.achvScroll / maxScroll);
         c.beginPath();
         this.roundRect(c, D.w - 16, barY, 5, barH, 3);
-        c.fillStyle = 'rgba(201,162,39,.45)';
+        c.fillStyle = 'rgba(230,223,200,.38)';
         c.fill();
       }
 
+      // 右上角关闭（骨白描边，和面板同一套配色）
       var close = this.achvCloseRect();
-      this._chip(c, close.x, close.y, close.w, close.h, close.label, false, close.fontPx);
-      this.hits = [close];
+      c.beginPath();
+      this.roundRect(c, close.x, close.y, close.w, close.h, 8);
+      c.fillStyle = 'rgba(0,0,0,.48)';
+      c.fill();
+      c.lineWidth = 1.4;
+      c.strokeStyle = K.borderOn;
+      c.stroke();
       c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = '700 18px ' + G.THEME.fontFamily;
+      c.fillStyle = K.bone;
+      c.fillText(close.label, close.x + close.w / 2, close.y + close.h / 2 + 1);
+      c.textBaseline = 'alphabetic';
+      this.hits = [close];
     },
 
     _drawHud: function (c, game, nowMs) {

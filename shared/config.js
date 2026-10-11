@@ -442,6 +442,23 @@
     });
   };
 
+  /* 角色类成就的名字覆盖（用户 2026-10-11 指定；没列到的用默认"合成出{角色名}"）。
+   * ⚠️ 键是**0 起的阶索引**：1=古兹 2=维多利亚 3=伊丽莎白 4=多萝茜 5=蕾克 6=库嘻嘻 7=爱丽丝。
+   * ⚠️ 必须定义在 G.ACHIEVEMENTS **之前**：下面那个 IIFE 会立刻读它。 */
+  G.ACHV_TIER_NAMES = {
+    1: '下金蛋的鸟',
+    2: '皇家红茶',
+    4: '教师节快乐',
+    5: '怨头帽耋',
+    6: '腹击',
+    7: '爱丽丝爱丽丝爱丽丝爱丽丝爱丽丝&&*……%#@！#￥*'
+  };
+
+  /* 每条角色成就用哪个图标（画法见 render.js 的 _achvIcon）。
+   * 目前支持：eye / egg / cup / apple / skull / key。回归测试会检查别写错。 */
+  G.ACHV_ICONS = ['eye', 'egg', 'cup', 'apple', 'skull', 'key'];
+  G.ACHV_TIER_ICONS = { 1: 'egg', 2: 'cup', 3: 'eye', 4: 'apple', 5: 'skull', 6: 'key', 7: 'key' };
+
   G.ACHIEVEMENTS = (function () {
     var tierList = [];
     /* 角色类：合成出第 2~8 阶各一条（第 1 阶不会作为合成结果出现） */
@@ -449,39 +466,42 @@
       (function (idx) {
         tierList.push({
           id: 'tier_' + idx,
-          name: '合成出{' + idx + '}',
+          /* 名字：用户在 G.ACHV_TIER_NAMES 里指定了就用他的（2026-10-11 改成梗名），
+           * 否则用默认模板"合成出{角色名}" */
+          name: G.ACHV_TIER_NAMES[idx] || ('合成出{' + idx + '}'),
           desc: '把两个{' + (idx - 1) + '}合成在一起',
+          icon: G.ACHV_TIER_ICONS[idx] || 'eye',
           test: function (s) { return s.tierMerges[idx] >= 1; }
         });
       })(t);
     }
     var mile = [
-      { id: 'first_merge', name: '初次合成', desc: '完成第一次合成',
+      { id: 'first_merge', name: '初次合成', desc: '完成第一次合成', icon: 'eye',
         test: function (s) { return s.merges >= 1; } },
-      { id: 'first_game', name: '第一局', desc: '玩完一局（无论输赢）',
+      { id: 'first_game', name: '第一局', desc: '玩完一局（无论输赢）', icon: 'key',
         test: function (s) { return s.games >= 1; } },
-      { id: 'combo3', name: '连锁反应', desc: '一次连击达到 3 连',
+      { id: 'combo3', name: '连锁反应', desc: '一次连击达到 3 连', icon: 'skull',
         test: function (s) { return s.maxCombo >= 3; },
         prog: function (s) { return Math.min(s.maxCombo, 3) + '/3'; } },
-      { id: 'combo6', name: '停不下来', desc: '一次连击达到 6 连',
+      { id: 'combo6', name: '停不下来', desc: '一次连击达到 6 连', icon: 'skull',
         test: function (s) { return s.maxCombo >= 6; },
         prog: function (s) { return Math.min(s.maxCombo, 6) + '/6'; } },
-      { id: 'score1000', name: '千分达成', desc: '单局拿到 1000 分',
+      { id: 'score1000', name: '千分达成', desc: '单局拿到 1000 分', icon: 'cup',
         test: function (s) { return s.best >= 1000; },
         prog: function (s) { return Math.min(s.best, 1000) + '/1000'; } },
-      { id: 'score5000', name: '五千分', desc: '单局拿到 5000 分',
+      { id: 'score5000', name: '五千分', desc: '单局拿到 5000 分', icon: 'skull',
         test: function (s) { return s.best >= 5000; },
         prog: function (s) { return Math.min(s.best, 5000) + '/5000'; } },
-      { id: 'drops100', name: '手熟', desc: '累计投放 100 次',
+      { id: 'drops100', name: '手熟', desc: '累计投放 100 次', icon: 'egg',
         test: function (s) { return s.drops >= 100; },
         prog: function (s) { return Math.min(s.drops, 100) + '/100'; } },
-      { id: 'merges100', name: '熟能生巧', desc: '累计合成 100 次',
+      { id: 'merges100', name: '熟能生巧', desc: '累计合成 100 次', icon: 'egg',
         test: function (s) { return s.merges >= 100; },
         prog: function (s) { return Math.min(s.merges, 100) + '/100'; } },
-      { id: 'games10', name: '常客', desc: '累计游玩 10 局',
+      { id: 'games10', name: '常客', desc: '累计游玩 10 局', icon: 'apple',
         test: function (s) { return s.games >= 10; },
         prog: function (s) { return Math.min(s.games, 10) + '/10'; } },
-      { id: 'alice5', name: '收藏家', desc: '累计合成出 5 次最高阶角色',
+      { id: 'alice5', name: '收藏家', desc: '累计合成出 5 次最高阶角色', icon: 'key',
         test: function (s) { return s.aliceCount >= 5; },
         prog: function (s) { return Math.min(s.aliceCount, 5) + '/5'; } }
     ];
@@ -489,12 +509,29 @@
     return [mile[0]].concat(tierList, mile.slice(1));
   })();
 
+  /* 成就系统的配色：**惨白为主 + 一点血红**，参考背景里的狮子/独角兽/骷髅 */
+  G.ACHV_COLORS = {
+    bone: '#e6dfc8',                          // 惨白（骨白）
+    boneBright: '#f4eeda',
+    boneDim: 'rgba(214,206,182,.32)',
+    blood: '#95202a',                         // 暗红
+    bloodBright: '#c2402f',
+    rowOn: 'rgba(146,32,42,.20)',             // 已解锁行底（带血色）
+    rowOff: 'rgba(0,0,0,.42)',
+    borderOn: 'rgba(230,223,200,.70)',
+    borderOff: 'rgba(170,162,140,.24)'
+  };
+
   /* 成就面板的排版参数 */
   G.ACHV_UI = {
     panelW: 640, top: 150, bottom: 130,
-    rowH: 64, rowGap: 8, titleH: 92,
+    rowH: 64, rowGap: 8,
+    icon: 30,             // 图标直径（逻辑像素）
     scrollStep: 1,        // 手指移动 1px = 列表滚 1px（直接拖动的手感）
-    toastMs: 3.4          // 解锁提示条停留秒数
+    toastMs: 3.4,         // 解锁提示条停留秒数
+    /* 开始界面入口：长宽比不变、面积约原来的 2 倍（168×40 → 238×57），位置挪到
+     * "开始游戏"按钮正下方（按钮 y 752~870，取 900 留 30px 间距） */
+    entryW: 238, entryH: 57, entryY: 900
   };
 
   G.derive();

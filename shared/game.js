@@ -658,6 +658,26 @@
         return opened && (this.screen === before);
       }).call(this), '');
 
+    // 7i) 图标 / 名字 / 入口尺寸（2026-10-11 用户提的改动，钉住免得改回去）
+    var badIcon = [];
+    for (var ai2 = 0; ai2 < AL.length; ai2++) {
+      if ((G.ACHV_ICONS || []).indexOf(AL[ai2].icon) < 0) badIcon.push(AL[ai2].id);
+    }
+    ok('每条成就的图标都在支持列表里', badIcon.length === 0, badIcon.join(','));
+    ok('角色成就用上了用户指定的名字',
+      (function () {
+        var a1 = G.Achv.byId('tier_1'), a7 = G.Achv.byId('tier_7');
+        return a1 && a1.name === '下金蛋的鸟' && a7 && a7.name.indexOf('爱丽丝爱丽丝') === 0;
+      })(), G.Achv.byId('tier_1') ? G.Achv.byId('tier_1').name : '无');
+    ok('成就入口：面积约 2 倍且长宽比不变',
+      (function () {
+        var UI = G.ACHV_UI;
+        var ratio = (UI.entryW * UI.entryH) / (168 * 40);
+        return ratio > 1.9 && ratio < 2.1
+          && Math.abs((UI.entryW / UI.entryH) - (168 / 40)) < 0.05;
+      })(), G.ACHV_UI.entryW + 'x' + G.ACHV_UI.entryH
+        + '（' + ((G.ACHV_UI.entryW * G.ACHV_UI.entryH) / (168 * 40)).toFixed(2) + ' 倍）');
+
     // 7d) BGM：两个命名版本各一首，版本名写错要能回退
     ok('两个版本各有自己的 BGM 文件',
       G.bgmPathFor('normal') === 'assets/audio/bgm_normal.mp3'
