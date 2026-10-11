@@ -78,6 +78,23 @@
       try { this._impl.play(name, opts || {}); } catch (e) { /* 静默 */ }
     },
 
+    /* 等某个音频（一般用 'bgm'）加载到"可以立刻播"，完成后回调一次 cb(ok)。
+     * ★ 2026-10-11 加：用户要求"BGM 加载好才进开始界面"，加载闸门用它。
+     * 这里**不放定时器**（共享层要平台无关），超时由调用方（web/main.js）负责；
+     * 适配层没有这个能力时立刻 cb(false)，绝不阻塞。 */
+    whenReady: function (name, cb) {
+      cb = cb || function () {};
+      if (!this.ready || !this._impl || !this._impl.whenReady) { cb(false); return this; }
+      try { this._impl.whenReady(name, cb); } catch (e) { cb(false); }
+      return this;
+    },
+
+    /* 某个音频当前加载到哪一步（0~4；没有这个音频返回 -1）。仅用于诊断/验证。 */
+    readyState: function (name) {
+      if (!this.ready || !this._impl || !this._impl.readyStateOf) return -1;
+      try { return this._impl.readyStateOf(name); } catch (e) { return -1; }
+    },
+
     playMerge: function (tier) {
       // tier 是"合成出来的新阶"，索引 0 起。音高随阶数升高，最高阶额外加一层
       var idx = G.util.clamp(tier - 1, 0, G.ASSETS.audio.merge.length - 1);
@@ -142,6 +159,19 @@
         pool[name] = a;
       },
       unlock: function () { unlocked = true; },
+
+      /* 微信端没有 readyState，这里做粗略处理：实例存在就当能播（和网页端接口保持一致） */
+      readyStateOf: function (name) { return pool[name] ? 4 : -1; },
+      whenReady: function (name, cb) {
+        var a = pool[name];
+        if (!a) { cb(false); return; }
+        var done = false;
+        function fin(okFlag) { if (!done) { done = true; cb(okFlag); } }
+        try {
+          a.onCanplay(function () { fin(true); });
+          a.onError(function () { fin(false); });
+        } catch (e) { fin(true); }
+      },
       play: function (name, opts) {
         var a = pool[name];
         if (!a || !unlocked) return;

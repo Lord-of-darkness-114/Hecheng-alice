@@ -45,7 +45,8 @@ PROBE_A = r"""
     'textures[].img 有图': imgCount(),
     各版本缓存: cacheStat(),
     当前贴图版本: G.textureVariantName(),
-    地狱版还在下载: R.variantPending ? R.variantPending('hell') : '无此接口'
+    地狱版还在下载: R.variantPending ? R.variantPending('hell') : '无此接口',
+    进开始界面那一刻: window.__boot || '没记录（旧代码？）'
   };
 
   g.setNameVersion('hell');                 // ← 切到地狱版

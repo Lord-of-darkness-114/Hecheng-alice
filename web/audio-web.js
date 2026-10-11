@@ -187,6 +187,40 @@
         } catch (e) { /* 静默 */ }
       },
 
+      /* 某个音频加载到哪一步（0~4，4 = 可以流畅播放）；没有这个音频返回 -1。诊断用。 */
+      readyStateOf: function (name) {
+        var a = els[name];
+        return (a && typeof a.readyState === 'number') ? a.readyState : -1;
+      },
+
+      /* 等某个音效/BGM 到"可以立刻播"再回调一次 cb(true)。
+       *  ★ 2026-10-11 加：用户要求"BGM 加载好才进开始界面"，加载闸门用它。
+       *  没这个音频 -> 立刻 cb(false)；加载中 -> 挂 canplay/error 事件等。
+       *  超时不由这里管（共享层不能有定时器），交给调用方。 */
+      whenReady: function (name, cb) {
+        var a = els[name];
+        if (!a) { cb(false); return; }
+        if (a.readyState >= 3) { cb(true); return; }     // 3 = HAVE_FUTURE_DATA
+        var done = false;
+        function onOk() { fin(true); }
+        function onErr() { fin(false); }
+        function fin(okFlag) {
+          if (done) return;
+          done = true;
+          try {
+            a.removeEventListener('canplay', onOk);
+            a.removeEventListener('canplaythrough', onOk);
+            a.removeEventListener('error', onErr);
+          } catch (e) { /* 静默 */ }
+          cb(okFlag);
+        }
+        try {
+          a.addEventListener('canplay', onOk);
+          a.addEventListener('canplaythrough', onOk);
+          a.addEventListener('error', onErr);
+        } catch (e) { fin(a.readyState >= 2); }
+      },
+
       unlock: function () {
         unlocked = true;
         if (!ensure()) return;
