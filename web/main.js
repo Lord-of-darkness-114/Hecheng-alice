@@ -77,9 +77,15 @@
   function loadFonts() {
     var fonts = doc.fonts;
     if (!fonts || !fonts.load) return Promise.resolve();
-    try {
-      return fonts.load('700 46px BSLabel').then(function () {}, function () {});
-    } catch (e) { return Promise.resolve(); }
+    /* 两个嵌入字体都要预加载：BSLabel（"开始游戏"按钮，草书）+ BSRun（合成字幕，行书）。
+     * 不先加载好就渲染，第一帧会用回退字体画一遍（能看到字体"跳变"）。 */
+    var list = ['700 46px BSLabel', '700 46px BSRun'];
+    var jobs = [];
+    for (var i = 0; i < list.length; i++) {
+      try { jobs.push(fonts.load(list[i]).then(function () {}, function () {})); }
+      catch (e) { /* 单个失败不影响另一个 */ }
+    }
+    return Promise.all(jobs);
   }
 
   /* 等 BGM 加载到"可以立刻播"（用户 2026-10-11 要求：BGM 没好就不进开始界面）。

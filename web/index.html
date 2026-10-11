@@ -39,6 +39,15 @@
     font-weight: 400 700;      /* 让 700 也用真字形，避免浏览器做"假粗体"把笔画糊掉 */
     font-display: block;
   }
+  /* 合成字幕用的**行书**：志莽行书 Zhi Mang Xing（同为 OFL 开源，许可证见
+     assets/fonts/OFL-ZhiMangXing.txt；子集同样是 48 字 / 23KB）。
+     用户 2026-10-11 反馈"草书短时间内认不出" → 字幕改用行书（开始游戏按钮保留草书）。 */
+  @font-face {
+    font-family: 'BSRun';
+    src: url('assets/fonts/bs-run.ttf') format('truetype');
+    font-weight: 400 700;
+    font-display: block;
+  }
 </style>
 </head>
 <body>

@@ -742,9 +742,10 @@
     ok('成就文案里的角色名覆盖**按版本分流**（正常=莉耶芙 / 地狱=玛丽苏）',
       G.achvFill('{6}', 'normal') === '莉耶芙' && G.achvFill('{6}', 'hell') === '玛丽苏',
       'normal=' + G.achvFill('{6}', 'normal') + ' hell=' + G.achvFill('{6}', 'hell'));
-    ok('地狱版角色字幕有"红底 + 白色描边草书"的配置（G.BANNER）',
-      !!(G.BANNER && G.BANNER.hellFont && G.BANNER.hellBg && G.BANNER.hellStroke),
-      G.BANNER ? G.BANNER.hellFont : '无');
+    ok('地狱版角色字幕有"红字 + 白色描边"的配置（G.BANNER，不再用底板）',
+      !!(G.BANNER && G.BANNER.hellFont && G.BANNER.hellFill && G.BANNER.hellStroke
+         && !G.BANNER.hellBg),
+      (G.BANNER ? G.BANNER.hellFont : '无') + ' 填色=' + (G.BANNER ? G.BANNER.hellFill : '无'));
     ok('伊丽莎白那条已改名为「魂之贵夫人」',
       G.Achv.byId('tier_3') && G.Achv.byId('tier_3').name === '魂之贵夫人',
       G.Achv.byId('tier_3') ? G.Achv.byId('tier_3').name : '无');

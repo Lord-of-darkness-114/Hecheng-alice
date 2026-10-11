@@ -1210,30 +1210,24 @@
         c.globalAlpha = 1;
       }
 
-      // 角色喊话字幕（地狱版：红底 + 白色描边的草书；正常版：原来的金色字）
+      // 角色喊话字幕（地狱版：红字 + 白色描边，行书；正常版：原来的金色字）
       if (this.banner.t > 0) {
         var B = G.BANNER || {};
         var by = D.h * ((B.y != null) ? B.y : 0.34);
         c.globalAlpha = Math.min(1, this.banner.t);
         if (this.banner.hell) {
-          c.font = B.hellFont || '700 46px BSLabel, serif';
-          var tw = c.measureText(this.banner.text).width;
-          var padX = 34, bh = 78;
-          c.beginPath();
-          this.roundRect(c, D.w / 2 - tw / 2 - padX, by - bh * 0.64, tw + padX * 2, bh, 10);
-          c.fillStyle = B.hellBg || 'rgba(146,26,34,.90)';
-          c.fill();
-          c.lineWidth = 2;
-          c.strokeStyle = B.hellBgEdge || 'rgba(246,241,226,.85)';
-          c.stroke();
+          /* ★ 用户 2026-10-11 澄清：不要底板框，就是**字本身红、边缘白**。
+           * 画法：先按粗线描一圈白（strokeText），再把红字填在上面（fillText）→ 白边自然露出来 */
+          c.font = B.hellFont || '700 46px BSRun, serif';
           c.lineJoin = 'round';
-          c.lineWidth = B.hellStrokeW || 5;
+          c.lineCap = 'round';
+          c.lineWidth = B.hellStrokeW || 7;
           c.strokeStyle = B.hellStroke || '#f6f1e2';
-          c.strokeText(this.banner.text, D.w / 2, by);      // 白色描边先画
-          c.fillStyle = B.hellText || '#12100e';
-          c.fillText(this.banner.text, D.w / 2, by);        // 再填近黑的字
+          c.strokeText(this.banner.text, D.w / 2, by);
+          c.fillStyle = B.hellFill || '#d5322c';
+          c.fillText(this.banner.text, D.w / 2, by);
         } else {
-          c.font = '700 40px ' + G.THEME.fontFamily;
+          c.font = B.normalFont || ('700 40px ' + G.THEME.fontFamily);
           c.fillStyle = C.goldBright;
           c.fillText(this.banner.text, D.w / 2, by);
         }
