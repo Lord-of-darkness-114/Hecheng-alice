@@ -422,5 +422,80 @@
     }
   };
 
+  /* -------- 成就系统（2026-10-11 新增）--------
+   * 每条：id（唯一，存档用它）/ name / desc / test(stats) / prog(stats)（可选，面板进度）
+   * · 角色类成就的文案里用 {0}~{7} 占位，显示时按**当前命名版本**替换
+   *   （正常版叫"古兹"，地狱版叫"手撕鸡"）。
+   * · stats 的字段见 shared/achievements.js 的 blankStats()。
+   * -------------------------------------------- */
+  G.achvNames = function () {
+    var set = G.NAME_SETS[G.nameVersion] || G.NAME_SETS[G.NAME_VERSION_DEFAULT];
+    return (set && set.names) || [];
+  };
+
+  /* 把文案里的 {0}~{7} 换成当前版本的角色名 */
+  G.achvFill = function (text) {
+    var names = G.achvNames();
+    return String(text).replace(/\{(\d)\}/g, function (m, d) {
+      var n = names[parseInt(d, 10)];
+      return n == null ? m : n;
+    });
+  };
+
+  G.ACHIEVEMENTS = (function () {
+    var tierList = [];
+    /* 角色类：合成出第 2~8 阶各一条（第 1 阶不会作为合成结果出现） */
+    for (var t = 1; t < 8; t++) {
+      (function (idx) {
+        tierList.push({
+          id: 'tier_' + idx,
+          name: '合成出{' + idx + '}',
+          desc: '把两个{' + (idx - 1) + '}合成在一起',
+          test: function (s) { return s.tierMerges[idx] >= 1; }
+        });
+      })(t);
+    }
+    var mile = [
+      { id: 'first_merge', name: '初次合成', desc: '完成第一次合成',
+        test: function (s) { return s.merges >= 1; } },
+      { id: 'first_game', name: '第一局', desc: '玩完一局（无论输赢）',
+        test: function (s) { return s.games >= 1; } },
+      { id: 'combo3', name: '连锁反应', desc: '一次连击达到 3 连',
+        test: function (s) { return s.maxCombo >= 3; },
+        prog: function (s) { return Math.min(s.maxCombo, 3) + '/3'; } },
+      { id: 'combo6', name: '停不下来', desc: '一次连击达到 6 连',
+        test: function (s) { return s.maxCombo >= 6; },
+        prog: function (s) { return Math.min(s.maxCombo, 6) + '/6'; } },
+      { id: 'score1000', name: '千分达成', desc: '单局拿到 1000 分',
+        test: function (s) { return s.best >= 1000; },
+        prog: function (s) { return Math.min(s.best, 1000) + '/1000'; } },
+      { id: 'score5000', name: '五千分', desc: '单局拿到 5000 分',
+        test: function (s) { return s.best >= 5000; },
+        prog: function (s) { return Math.min(s.best, 5000) + '/5000'; } },
+      { id: 'drops100', name: '手熟', desc: '累计投放 100 次',
+        test: function (s) { return s.drops >= 100; },
+        prog: function (s) { return Math.min(s.drops, 100) + '/100'; } },
+      { id: 'merges100', name: '熟能生巧', desc: '累计合成 100 次',
+        test: function (s) { return s.merges >= 100; },
+        prog: function (s) { return Math.min(s.merges, 100) + '/100'; } },
+      { id: 'games10', name: '常客', desc: '累计游玩 10 局',
+        test: function (s) { return s.games >= 10; },
+        prog: function (s) { return Math.min(s.games, 10) + '/10'; } },
+      { id: 'alice5', name: '收藏家', desc: '累计合成出 5 次最高阶角色',
+        test: function (s) { return s.aliceCount >= 5; },
+        prog: function (s) { return Math.min(s.aliceCount, 5) + '/5'; } }
+    ];
+    /* 顺序：初次合成 → 角色一路合成上去 → 里程碑 */
+    return [mile[0]].concat(tierList, mile.slice(1));
+  })();
+
+  /* 成就面板的排版参数 */
+  G.ACHV_UI = {
+    panelW: 640, top: 150, bottom: 130,
+    rowH: 64, rowGap: 8, titleH: 92,
+    scrollStep: 1,        // 手指移动 1px = 列表滚 1px（直接拖动的手感）
+    toastMs: 3.4          // 解锁提示条停留秒数
+  };
+
   G.derive();
 })(typeof window !== 'undefined' ? window : this);

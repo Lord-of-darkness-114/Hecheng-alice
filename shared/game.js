@@ -21,6 +21,8 @@
      * bgmAt > 0 = 还有几秒该起 BGM（走游戏时钟倒计时，见 _updateTimers）。 */
     this.screen = 'title';
     this.bgmAt = 0;
+    this._achvFrom = 'title';        // 成就面板是从哪个界面打开的（关闭时回到那儿）
+    if (G.Achv) G.Achv.init(adapter);   // 接上存档（适配层有 getData/setData 才存）
     this.reset();
     this._last = 0;
     this._acc = 0;
@@ -212,6 +214,7 @@
     body.game.born = 1;
     this._dropCd = G.RULES.dropCooldownMs;
     G.Sound.playDropFor(this.hold.tier);   // 投放的角色播他自己的音效（艾露玛回退通用投放音）
+    if (G.Achv) this._achv(G.Achv.noteDrop());
     this.hold = { tier: this.next };
     this.next = this._rollTier();
     this.onMove(this.holdX);          // 新球半径不同，重新夹紧一次
@@ -271,6 +274,7 @@
     this.render.say(tier + 1);
     this.render.flash = Math.min(0.5, this.render.flash + 0.18);
     G.Sound.playMerge(tier + 1);
+    if (G.Achv) this._achv(G.Achv.noteMerge(tier + 1, this.combo));   // 统计 + 查成就
     this.ad.vibrate(12);
     return nb;
   };
@@ -302,9 +306,16 @@
           y >= h.hitY && y <= h.hitY + h.hitH) {
         if (h.action === 'start') { this.startGame(); return 'start'; }
         if (h.action === 'back') { this.backToTitle(); return 'back'; }
+        if (h.action === 'achv') { this.openAchievements(); return 'achv'; }
+        if (h.action === 'achvClose') { this.closeAchievements(); return 'achvClose'; }
         this.setNameVersion(h.key);
         return 'version';
       }
+    }
+    // 成就面板里：按住拖动 = 滚动列表
+    if (this.screen === 'achv') {
+      if (this.render.achvDragStart) this.render.achvDragStart(y);
+      return 'achvDrag';
     }
     // 2) 开始界面上点别处不做事（免得误判成投球）
     if (this.screen !== 'play') return 'title';
@@ -328,7 +339,12 @@
     return true;
   };
 
-  Game.prototype.onMove = function (x) {
+  Game.prototype.onMove = function (x, y) {
+    // 成就面板里拖动 = 滚动列表（垂直），不参与瞄准
+    if (this.screen === 'achv') {
+      if (this.render.achvDragMove) this.render.achvDragMove(y);
+      return;
+    }
     if (this.dead || this.screen !== 'play') return;
     var F = G.FIELD;
     var r = G.THEME.tiers[this.hold ? this.hold.tier : 0].radius;
@@ -338,6 +354,10 @@
   };
 
   Game.prototype.onUp = function () {
+    if (this.screen === 'achv') {          // 面板里松手 = 结束拖动
+      if (this.render.achvDragEnd) this.render.achvDragEnd();
+      return;
+    }
     if (this.dead || this.screen !== 'play') return;
     this.drop();
   };
@@ -356,6 +376,7 @@
     this.reset();                     // 每次从开始界面进来都是全新一局
     G.Sound.unlock();                 // 这次点击就是"用户交互"，正好用来解锁音频
     this.bgmAt = (G.TITLE && G.TITLE.bgmDelay) || 0.5;
+    if (G.Achv) this._achv(G.Achv.beginGame());     // 统计"开局数"并查成就
     return this;
   };
 
@@ -369,12 +390,43 @@
     return this;
   };
 
+  /* ---------------- 成就 ----------------
+   * 事件里产生的"新解锁"统一走这里：弹提示 + 响一声（音效先借用 ui，等素材到位再换）。 */
+  Game.prototype._achv = function (list) {
+    if (!list || !list.length) return 0;
+    for (var i = 0; i < list.length; i++) {
+      if (this.render.showAchievement) this.render.showAchievement(list[i]);
+    }
+    G.Sound.play('ui');
+    return list.length;
+  };
+
+  /* 打开成就面板：记住从哪个界面来的，关闭时回去。面板里不投球、不开始游戏。 */
+  Game.prototype.openAchievements = function () {
+    if (this.screen === 'achv') return this;
+    this._achvFrom = this.screen;
+    this.screen = 'achv';
+    if (this.render.achvScrollReset) this.render.achvScrollReset();
+    G.Sound.play('ui');
+    return this;
+  };
+
+  Game.prototype.closeAchievements = function () {
+    if (this.screen !== 'achv') return this;
+    this.screen = (this._achvFrom === 'play') ? 'play' : 'title';
+    G.Sound.play('ui');
+    return this;
+  };
+
   /* ---------------- 自测 ----------------
    * 供 ?selftest=1 和自动化回归使用。全部是同步的，不依赖计时器。
    * ------------------------------------ */
   Game.prototype.selfTest = function () {
     var checks = [];
     var self = this;
+    // 自测会驱动游戏（会累计统计、写存档），先快照成就状态，结束时还原 ——
+    // 免得开发跑一次自测就把玩家的成就解了
+    var achvSnap = G.Achv ? G.Achv.serialize(G.Achv.stats, G.Achv.unlocked) : '';
     function ok(name, pass, detail) {
       checks.push({ name: name, pass: !!pass, detail: detail == null ? '' : detail });
     }
@@ -560,6 +612,52 @@
     ok('whenReady 查不存在的音效会立刻回 false（绝不会卡住加载）',
       readyCb === false, '回调 = ' + readyCb);
 
+    // 7h) 成就系统（2026-10-11 新增）：判定是**纯函数**，这里不碰真实存档
+    var AL = G.ACHIEVEMENTS || [];
+    ok('成就表至少 12 条、id 唯一',
+      AL.length >= 12 && (function () {
+        var seen = {};
+        for (var i = 0; i < AL.length; i++) {
+          if (!AL[i].id || seen[AL[i].id]) return false;
+          seen[AL[i].id] = 1;
+        }
+        return true;
+      })(), '共 ' + AL.length + ' 条');
+    ok('每条成就都有 name / desc / test',
+      (function () {
+        for (var i = 0; i < AL.length; i++) {
+          if (!AL[i].name || !AL[i].desc || typeof AL[i].test !== 'function') return false;
+        }
+        return true;
+      })(), '');
+    var bs = G.Achv.blankStats();
+    ok('空白统计下没有任何成就解锁',
+      G.Achv.newlyUnlocked(bs, {}).length === 0, G.Achv.newlyUnlocked(bs, {}).join(','));
+    var s1 = G.Achv.blankStats(); s1.merges = 1;
+    var got1 = G.Achv.newlyUnlocked(s1, {});
+    ok('合成一次即解锁"初次合成"', got1.indexOf('first_merge') >= 0, got1.join(','));
+    ok('已解锁的不会重复解锁',
+      G.Achv.newlyUnlocked(s1, { first_merge: 1 }).indexOf('first_merge') < 0, '');
+    var topIdx = G.THEME.tiers.length - 1;
+    var s2 = G.Achv.blankStats(); s2.tierMerges[topIdx] = 1;
+    ok('合出最高阶角色会解锁对应角色成就',
+      G.Achv.newlyUnlocked(s2, {}).indexOf('tier_' + topIdx) >= 0,
+      G.Achv.newlyUnlocked(s2, {}).join(','));
+    var back = G.Achv.parse(G.Achv.serialize({ merges: 7 }, { first_merge: 123 }));
+    ok('成就存档能原样读回',
+      back.stats.merges === 7 && back.unlocked.first_merge === 123, JSON.stringify(back));
+    ok('存档损坏/为空时回退成空白且不抛错',
+      G.Achv.parse('{{{这不是 JSON').stats.merges === 0
+      && G.Achv.parse('').stats.merges === 0, '');
+    ok('成就面板能开能关、开着时不能投球',
+      (function () {
+        var before = this.screen;
+        this.openAchievements();
+        var opened = (this.screen === 'achv') && (this.canDrop() === false);
+        this.closeAchievements();
+        return opened && (this.screen === before);
+      }).call(this), '');
+
     // 7d) BGM：两个命名版本各一首，版本名写错要能回退
     ok('两个版本各有自己的 BGM 文件',
       G.bgmPathFor('normal') === 'assets/audio/bgm_normal.mp3'
@@ -640,6 +738,13 @@
     var n = this.phys.balls().length;
     ok('大量投放后仍稳定', n > 0 && n < 60, 'n=' + n);
 
+    // 还原成就存档（自测不该污染玩家的成就进度）
+    if (achvSnap) {
+      var rs = G.Achv.parse(achvSnap);
+      G.Achv.stats = rs.stats;
+      G.Achv.unlocked = rs.unlocked;
+      G.Achv.save();
+    }
     this.reset();
     var passed = 0;
     for (i = 0; i < checks.length; i++) if (checks[i].pass) passed++;

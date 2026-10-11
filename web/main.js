@@ -178,7 +178,7 @@
     }
     function onMove(e) {
       var p = pos(e);
-      if (dragging) game.onMove(p.x);
+      if (dragging) game.onMove(p.x, p.y);   // 传 y：成就面板要靠它滚动列表
       else game.holdX = p.x;   // 未按下也跟随，方便预览落点
     }
     function onUp() {
@@ -227,6 +227,7 @@
        * ?showtier / ?pile / ?auto 全都测不到东西。
        * （?selftest 不在此列 —— 它自己会先验证开始界面，再 start。） */
       if (qs('auto') || qs('pile') || qs('showtier')) game.startGame();
+      if (qs('achv')) game.openAchievements();     // 调试：直接打开成就面板（截图/验证用）
       // ?showtier=N —— 调试：清空场地只在中间摆一颗第 N 阶的球
       var st = /[?&]showtier=(\d+)/.exec(root.location.search);
       if (st) {

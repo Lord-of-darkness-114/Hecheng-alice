@@ -29,6 +29,12 @@
     banner: { text: '', t: 0 },
     toast: { text: '', t: 0 },
 
+    /* 成就（2026-10-11 新增）：解锁提示条 + 面板滚动状态 */
+    achvToasts: [],                  // 待弹的提示队列
+    achvToast: { name: '', desc: '', t: 0 },
+    achvScroll: 0,                   // 面板已滚动的像素
+    _achvDrag: null,                 // { y0, s0 } 拖动起点
+
     /* ---------------- 初始化 ---------------- */
     init: function (adapter) {
       this.ad = adapter;
@@ -293,6 +299,16 @@
       if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 3.2);
       if (this.banner.t > 0) this.banner.t -= dt;
       if (this.toast.t > 0) this.toast.t -= dt;
+
+      // 成就提示条：当前这条放完，接着弹队列里的下一条
+      if (this.achvToast.t > 0) {
+        this.achvToast.t -= dt;
+        if (this.achvToast.t <= 0 && this.achvToasts.length) {
+          var nxt = this.achvToasts.shift();
+          this.achvToast = { name: nxt.name, desc: nxt.desc,
+                             t: (G.ACHV_UI && G.ACHV_UI.toastMs) || 3.4 };
+        }
+      }
     },
 
     clearFx: function () { this.fx.length = 0; this.shake = 0; this.flash = 0; this.banner.t = 0; },
@@ -317,6 +333,14 @@
       // 开始界面：只画标题画面，场地/球堆/瞄准/HUD 全部跳过
       if (game.screen === 'title') {
         this._drawTitle(c, game, nowMs);
+        this._drawAchvToast(c);
+        return;
+      }
+      // 成就面板：独立一屏（背景 + 列表 + 关闭）
+      if (game.screen === 'achv') {
+        this._drawBackground(c);
+        this._drawAchvPanel(c, nowMs);
+        this._drawAchvToast(c);
         return;
       }
 
@@ -336,6 +360,7 @@
         c.fillStyle = 'rgba(255,240,200,' + (this.flash * 0.35).toFixed(3) + ')';
         c.fillRect(0, 0, D.w, D.h);
       }
+      this._drawAchvToast(c);          // 成就解锁提示（所有界面都可能在上面弹）
     },
 
     _drawBackground: function (c) {
@@ -778,8 +803,170 @@
       // —— 版本切换胶囊（决定放哪首 BGM）+ 组装命中区 ——
       // 注：开始界面上原来的小字说明（按钮下提示 / 最高分 / 底部操作说明 /
       //     "角色版本 · 决定 BGM" 标签）已按用户要求**全部去掉**。
+      // —— 底部"成就"入口（显示已解锁进度）+ 版本切换胶囊 + 组装命中区 ——
+      var achvRect = this.achvTitleRect();
+      var achvLabel = '成就 ' + (G.Achv ? G.Achv.count() : 0) + '/' + (G.Achv ? G.Achv.total() : 0);
+      this._chip(c, achvRect.x, achvRect.y, achvRect.w, achvRect.h, achvLabel, false, 18);
       var picks = this._drawVersionPicker(c);
-      this.hits = picks.concat([this.titleStartRect()]);
+      this.hits = picks.concat([this.titleStartRect(), achvRect]);
+    },
+
+    /* ---------------- 成就面板 ----------------
+     * 开始界面底部一个"成就 n/N"胶囊进入；面板里一条条列出（可上下拖动滚动）。
+     * 未解锁压暗 + 显示进度；已解锁金色 + ★。
+     * ------------------------------------------ */
+    achvTitleRect: function () {
+      var w = 168, h = 40;
+      var x = (G.DESIGN.w - w) / 2, y = G.DESIGN.h - 108;
+      return {
+        action: 'achv', label: '成就',
+        x: x, y: y, w: w, h: h, fontPx: 18,
+        hitX: x - 14, hitY: y - 14, hitW: w + 28, hitH: h + 28
+      };
+    },
+
+    /* 面板右上角"关闭"（和游戏内"返回"同一套版式） */
+    achvCloseRect: function () {
+      var w = 96, h = 32, x = G.DESIGN.w - 22 - w, y = 84;
+      return {
+        action: 'achvClose', label: '关闭',
+        x: x, y: y, w: w, h: h, fontPx: 18,
+        hitX: x - 12, hitY: y - 12, hitW: w + 24, hitH: h + 24
+      };
+    },
+
+    achvScrollReset: function () { this.achvScroll = 0; this._achvDrag = null; return this; },
+    achvDragStart: function (y) { this._achvDrag = { y0: y, s0: this.achvScroll }; return this; },
+    achvDragMove: function (y) {
+      if (!this._achvDrag || typeof y !== 'number') return this;
+      var step = (G.ACHV_UI && G.ACHV_UI.scrollStep) || 1;
+      this.achvScroll = this._achvDrag.s0 - (y - this._achvDrag.y0) * step;
+      return this;
+    },
+    achvDragEnd: function () { this._achvDrag = null; return this; },
+
+    /* 解锁一条成就：顶部弹提示条（同时解锁多条会排队依次弹） */
+    showAchievement: function (def) {
+      if (!def) return this;
+      var fill = G.achvFill || function (t) { return t; };
+      var item = { name: fill(def.name), desc: fill(def.desc) };
+      if (this.achvToast.t > 0) this.achvToasts.push(item);
+      else this.achvToast = {
+        name: item.name, desc: item.desc,
+        t: (G.ACHV_UI && G.ACHV_UI.toastMs) || 3.4
+      };
+      return this;
+    },
+
+    /* 成就解锁提示条：开头 0.4 秒滑入，最后 0.5 秒淡出 */
+    _drawAchvToast: function (c) {
+      var T = this.achvToast;
+      if (!T || T.t <= 0) return;
+      var D = G.DESIGN, C = G.THEME.colors;
+      var total = (G.ACHV_UI && G.ACHV_UI.toastMs) || 3.4;
+      var alpha = Math.min(1, T.t / 0.5);
+      var slide = Math.min(1, Math.max(0, (total - T.t) / 0.4));
+      var y = 96 - (1 - slide) * 70;
+      var w = 480, x = (D.w - w) / 2;
+
+      c.save();
+      c.globalAlpha = alpha;
+      c.beginPath();
+      this.roundRect(c, x, y, w, 78, 12);
+      c.fillStyle = 'rgba(10,7,4,.90)';
+      c.fill();
+      c.lineWidth = 2;
+      c.strokeStyle = C.gold;
+      c.stroke();
+      c.textAlign = 'center';
+      c.font = '14px ' + G.THEME.fontFamily;
+      c.fillStyle = C.dim;
+      c.fillText('★ 成就解锁', D.w / 2, y + 26);
+      c.font = '700 26px ' + G.THEME.fontFamily;
+      c.fillStyle = C.goldBright;
+      c.fillText(T.name, D.w / 2, y + 58);
+      c.restore();
+      c.textAlign = 'center';
+    },
+
+    _drawAchvPanel: function (c, nowMs) {
+      var D = G.DESIGN, C = G.THEME.colors, UI = G.ACHV_UI;
+      var rows = (G.Achv && G.Achv.rows) ? G.Achv.rows() : [];
+      var got = (G.Achv && G.Achv.count) ? G.Achv.count() : 0;
+
+      c.fillStyle = 'rgba(4,3,6,.74)';
+      c.fillRect(0, 0, D.w, D.h);
+
+      c.textAlign = 'center';
+      c.font = '700 38px ' + G.THEME.fontFamily;
+      c.fillStyle = C.goldBright;
+      c.fillText('成 就  ' + got + ' / ' + rows.length, D.w / 2, UI.top - 30);
+      c.font = '14px ' + G.THEME.fontFamily;
+      c.fillStyle = C.dim;
+      c.fillText('拖动列表可上下滚动', D.w / 2, UI.top - 6);
+
+      var listTop = UI.top + 14;
+      var listBottom = D.h - UI.bottom;
+      var rowH = UI.rowH, gap = UI.rowGap;
+      var totalH = rows.length * (rowH + gap) - gap;
+      var maxScroll = Math.max(0, totalH - (listBottom - listTop));
+      this.achvScroll = U.clamp(this.achvScroll, 0, maxScroll);
+
+      c.save();
+      c.beginPath();
+      c.rect(0, listTop, D.w, listBottom - listTop);
+      c.clip();
+
+      var px = (D.w - UI.panelW) / 2;
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var y = listTop + i * (rowH + gap) - this.achvScroll;
+        if (y > listBottom || y + rowH < listTop) continue;
+
+        c.beginPath();
+        this.roundRect(c, px, y, UI.panelW, rowH, 10);
+        c.fillStyle = r.unlocked ? 'rgba(201,162,39,.16)' : 'rgba(0,0,0,.42)';
+        c.fill();
+        c.lineWidth = r.unlocked ? 1.6 : 1;
+        c.strokeStyle = r.unlocked ? C.gold : 'rgba(140,130,102,.40)';
+        c.stroke();
+
+        c.textAlign = 'left';
+        c.font = '22px ' + G.THEME.fontFamily;
+        c.fillStyle = r.unlocked ? C.goldBright : 'rgba(140,130,102,.55)';
+        c.fillText(r.unlocked ? '★' : '☆', px + 16, y + rowH / 2 + 8);
+
+        c.font = '700 22px ' + G.THEME.fontFamily;
+        c.fillStyle = r.unlocked ? C.goldBright : C.dim;
+        c.fillText(r.name, px + 52, y + 27);
+        c.font = '13px ' + G.THEME.fontFamily;
+        c.fillStyle = r.unlocked ? 'rgba(232,224,204,.85)' : 'rgba(140,130,102,.70)';
+        c.fillText(r.desc, px + 52, y + 49);
+
+        if (r.prog) {
+          c.textAlign = 'right';
+          c.font = '16px ' + G.THEME.fontFamily;
+          c.fillStyle = r.unlocked ? C.gold : 'rgba(140,130,102,.75)';
+          c.fillText(r.prog, px + UI.panelW - 16, y + rowH / 2 + 6);
+        }
+      }
+      c.restore();
+
+      // 滚动条（内容超出时才画）
+      if (maxScroll > 0) {
+        var trackH = listBottom - listTop;
+        var barH = Math.max(36, trackH * trackH / totalH);
+        var barY = listTop + (trackH - barH) * (this.achvScroll / maxScroll);
+        c.beginPath();
+        this.roundRect(c, D.w - 16, barY, 5, barH, 3);
+        c.fillStyle = 'rgba(201,162,39,.45)';
+        c.fill();
+      }
+
+      var close = this.achvCloseRect();
+      this._chip(c, close.x, close.y, close.w, close.h, close.label, false, close.fontPx);
+      this.hits = [close];
+      c.textAlign = 'center';
     },
 
     _drawHud: function (c, game, nowMs) {

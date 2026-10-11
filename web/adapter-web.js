@@ -144,6 +144,16 @@
     return this;
   };
 
+  /* 通用存档：成就等结构化数据存成 JSON 字符串（微信端用 wx.setStorageSync 实现同两个方法） */
+  WebAdapter.prototype.getData = function (key) {
+    try { return root.localStorage.getItem(key) || ''; } catch (e) { return ''; }
+  };
+
+  WebAdapter.prototype.setData = function (key, value) {
+    try { root.localStorage.setItem(key, String(value)); } catch (e) { /* 隐私模式静默 */ }
+    return this;
+  };
+
   /* 角色命名版本（正常版 / 地狱版） */
   WebAdapter.prototype.getNameVersion = function () {
     try { return root.localStorage.getItem(G.NAME_VERSION_KEY) || ''; } catch (e) { return ''; }
