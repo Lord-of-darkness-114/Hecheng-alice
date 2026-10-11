@@ -227,6 +227,22 @@
        * ?showtier / ?pile / ?auto 全都测不到东西。
        * （?selftest 不在此列 —— 它自己会先验证开始界面，再 start。） */
       if (qs('auto') || qs('pile') || qs('showtier')) game.startGame();
+      /* 成就的调试参数（只在你手动带参数时生效，正常玩不受影响）：
+       *   ?achv=1       直接打开成就面板
+       *   ?unlockall=1  一键解锁全部（只为看"全解锁"版式长什么样）
+       *   ?achvreset=1  清空成就存档（重测用）
+       * 例：?unlockall=1&achv=1 */
+      if (qs('achvreset') && G.Achv) G.Achv.reset();
+      if (qs('unlockall') && G.Achv && G.ACHIEVEMENTS) {
+        for (var ai = 0; ai < G.ACHIEVEMENTS.length; ai++) G.Achv.unlocked[G.ACHIEVEMENTS[ai].id] = 1;
+        // 统计也抬到成就门槛，这样面板上的进度显示才合理（比如 3/3、1000/1000）
+        var st = G.Achv.stats;
+        st.merges = Math.max(st.merges, 100);      st.drops = Math.max(st.drops, 100);
+        st.games = Math.max(st.games, 10);         st.best = Math.max(st.best, 5000);
+        st.maxCombo = Math.max(st.maxCombo, 6);    st.aliceCount = Math.max(st.aliceCount, 5);
+        for (var ti = 0; ti < st.tierMerges.length; ti++) st.tierMerges[ti] = Math.max(st.tierMerges[ti], 1);
+        G.Achv.save();
+      }
       if (qs('achv')) game.openAchievements();     // 调试：直接打开成就面板（截图/验证用）
       // ?showtier=N —— 调试：清空场地只在中间摆一颗第 N 阶的球
       var st = /[?&]showtier=(\d+)/.exec(root.location.search);
