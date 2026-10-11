@@ -62,8 +62,9 @@ PROBE_A = r"""
   };
 
   // ②b 精确模拟"新版本贴图还没下载好"（云端第一次切版本就是这状态）：
-  //     清空地狱版缓存，看 drawBall 那一行表达式取到的是什么。
+  //     清空地狱版缓存，看 drawBall 那一行表达式取到的是什么；测完把缓存还原。
   var sentinel = R.textures[3] && R.textures[3].img;
+  var savedHell = R.textureCache.hell;
   R.textureCache.hell = {};
   var got = R._textureFor(3) || (R.textures[3] && R.textures[3].img) || null;
   var simulate = {
@@ -73,6 +74,7 @@ PROBE_A = r"""
     说明: (got && got === sentinel) ? '走的是本次修复的兜底分支，不会闪占位小球 ✅'
                                    : '兜底没生效，还是会闪占位球 ❌'
   };
+  R.textureCache.hell = savedHell;      // 还原，免得影响第 ③ 步的统计
 
   return JSON.stringify([before, after, simulate], null, 1);
 })()
