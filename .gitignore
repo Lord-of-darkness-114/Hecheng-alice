@@ -23,6 +23,7 @@ log3.txt
 
 # 各类测试输出（探针/回归产生的日志）
 *.err.txt
+tools/_verify.txt
 live*.txt
 pub*.txt
 dom*.txt
