@@ -559,6 +559,35 @@
     ok('穿透量在安全范围（<6px）', pen.max < 6,
       'max=' + pen.max.toFixed(1) + ' avg=' + pen.avg.toFixed(1) + ' pairs=' + pen.pairs);
 
+    /* 5b) 物理审计（2026-10-12）：静止球堆必须真的"安静下来"。
+     *     原来 sepMinPenetration=1.0 时，分离修正会跟 Matter 求解器互相拉扯，
+     *     某些堆型卡进永久微抖（球堆永远睡不着、位置一直在动）——
+     *     速度很小、块 6 的"速度趋零"抓不到，所以要直接量位移。 */
+    this.reset();
+    var pileTiers = [0, 1, 2, 3, 4, 0, 1, 2, 0, 1, 3, 2];
+    for (var pi = 0; pi < pileTiers.length; pi++) {
+      this.dropAt(pileTiers[pi],
+        G.FIELD.x + 60 + ((pi * 47) % Math.max(1, (G.FIELD.w - 120))));
+      this.simulate(22);
+    }
+    this.simulate(420);                                  // 静置 ~7 秒
+    var pb = this.phys.balls(), sleepN = 0, pj;
+    for (pj = 0; pj < pb.length; pj++) if (pb[pj].isSleeping) sleepN++;
+    var lastPos = [];
+    for (pj = 0; pj < pb.length; pj++) lastPos.push({ x: pb[pj].position.x, y: pb[pj].position.y });
+    var movedPx = 0;
+    for (var ps = 0; ps < 60; ps++) {
+      this.phys.step();
+      for (pj = 0; pj < pb.length; pj++) {
+        movedPx += Math.abs(pb[pj].position.x - lastPos[pj].x)
+                 + Math.abs(pb[pj].position.y - lastPos[pj].y);
+        lastPos[pj].x = pb[pj].position.x;
+        lastPos[pj].y = pb[pj].position.y;
+      }
+    }
+    ok('静置后球堆不再持续微抖（分离修正没跟求解器打架）', movedPx < 5,
+      '60 步总位移 ' + movedPx.toFixed(1) + 'px，' + sleepN + '/' + pb.length + ' 睡着');
+
     // 6) 球堆能稳定下来（速度趋零）
     this.simulate(360);
     var maxSpeed = 0;
@@ -864,6 +893,22 @@
     this.simulate(200);
     ok('静止球仍然会正常入睡（休眠没被这次修复废掉）', !!lone.isSleeping,
       'isSleeping=' + lone.isSleeping);
+
+    /* 8d) 悬空兜底（2026-10-12 物理审计）：把一颗球摆到半空并强制睡着，
+     *     兜底扫描应该在 0.5 秒内叫醒它 —— 不管是什么路径造成的悬空。 */
+    this.reset();
+    var stray = this.dropAt(2, G.DESIGN.w / 2);
+    G.Physics.Matter.Body.setPosition(stray,
+      { x: G.DESIGN.w / 2, y: G.FIELD.floorY - 260 });
+    G.Physics.Matter.Body.setVelocity(stray, { x: 0, y: 0 });
+    G.Physics.Matter.Sleeping.set(stray, true);
+    var rescued = false;
+    for (var rsi = 0; rsi < 60 && !rescued; rsi++) {
+      this.phys.step();
+      if (!stray.isSleeping) rescued = true;
+    }
+    ok('兜底会把"悬空还睡着"的球叫醒（不管它怎么悬空的）', rescued,
+      'isSleeping=' + stray.isSleeping);
 
     // 8) 重启清场
     this.restart();
