@@ -154,7 +154,11 @@
         y = g.prevY + (y - g.prevY) * alpha;
         a = g.prevA + (a - g.prevA) * alpha;
       }
-      out.push({ x: x, y: y, angle: a, tier: g.tier, radius: b.circleRadius, born: g.born });
+      /* 绘制用的半径必须是**贴图半径**（G.THEME.tiers），不是 b.circleRadius ——
+       * 2026-10-12 起碰撞半径比贴图小（G.PHYSICS.collisionScale），
+       * 用 circleRadius 画的话贴图会跟着缩小，那是错的 */
+      out.push({ x: x, y: y, angle: a, tier: g.tier,
+                 radius: G.THEME.tiers[g.tier].radius, born: g.born });
     }
     return out;
   };
@@ -165,7 +169,9 @@
       var b = src[i];
       if (b.game.born > 0) b.game.born = Math.max(0, b.game.born - seconds / 0.16);
       // 失败判定：静止 + 越过警戒线
-      var r = b.circleRadius;
+      // ★ 越线用**贴图半径**判断：玩家看到的是贴图越过那条线，视觉与判定要一致
+      //   （碰撞半径比贴图小，用 circleRadius 会"看着越线了却还不判负"）
+      var r = G.THEME.tiers[b.game.tier].radius;
       var overLine = (b.position.y - r) < (G.CEIL_Y - G.RULES.overLineDepth);
       var still = b.speed < G.RULES.overLineSpeed;
       if (!this.dead && overLine && still) {
@@ -499,6 +505,17 @@
     ok('合成出的阶数正确', this.phys.balls()[0] && this.phys.balls()[0].game.tier === 1,
       'tier=' + (this.phys.balls()[0] && this.phys.balls()[0].game.tier));
 
+    // 1b) 碰撞半径**刻意略小于**贴图半径（2026-10-12 用户要求）
+    var probe = this.phys.balls()[0];
+    var artR = G.THEME.tiers[probe.game.tier].radius;
+    ok('碰撞半径比贴图半径略小（系数 ' + (G.PHYSICS.collisionScale || 1) + '）',
+      probe.circleRadius < artR && probe.circleRadius > artR * 0.8,
+      '碰撞 ' + probe.circleRadius.toFixed(1) + 'px / 贴图 ' + artR + 'px');
+    var vis = this._visualBalls();
+    ok('绘制半径仍是贴图半径（贴图不会跟着缩小）',
+      !!vis[0] && vis[0].radius === artR,
+      'visual.radius=' + (vis[0] && vis[0].radius) + ' 期望 ' + artR);
+
     // 2) 不同阶不合成
     this.reset();
     this.dropAt(0, x - 30);
@@ -805,7 +822,9 @@
     var stepMs = G.PHYSICS.fixedStepMs;
     for (var s = 0; s < Math.ceil(needMs / stepMs) + 5 && !this.dead; s++) {
       G.Physics.Matter.Body.setVelocity(big, { x: 0, y: 0 });
-      G.Physics.Matter.Body.setPosition(big, { x: G.DESIGN.w / 2, y: G.CEIL_Y + big.circleRadius - 2 });
+      // 越线判定看的是**贴图半径**（见 _updateBalls），所以这里也按贴图半径摆位
+      var bigArtR = G.THEME.tiers[bigTier].radius;
+      G.Physics.Matter.Body.setPosition(big, { x: G.DESIGN.w / 2, y: G.CEIL_Y + bigArtR - 2 });
       this._updateBalls(stepMs / 1000);
     }
     ok('越线静止持续超时会判负', this.dead, 'dead=' + this.dead);

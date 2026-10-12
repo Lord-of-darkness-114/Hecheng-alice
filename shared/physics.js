@@ -63,10 +63,12 @@
 
     onMergePair: function (fn) { this._onMergePair = fn; },
 
-    /* 创建一个球体。radius 由阶级配置决定；x/y 是初始位置 */
+    /* 创建一个球体。半径 = 阶级配置的 radius × collisionScale（碰撞比贴图略小），
+     * x/y 是初始位置。Matter 会把半径写进 body.circleRadius，后面所有物理
+     * （分离修正、越线判定以外的部分）用的都是这个值 ✓ */
     addBall: function (tier, x, y) {
       var M = this.Matter;
-      var radius = G.THEME.tiers[tier].radius;
+      var radius = G.THEME.tiers[tier].radius * (G.PHYSICS.collisionScale || 1);
       var cfg = G.PHYSICS.ball;
       var body = M.Bodies.circle(x, y, radius, {
         label: 'ball',
