@@ -829,6 +829,42 @@
     }
     ok('越线静止持续超时会判负', this.dead, 'dead=' + this.dead);
 
+    /* 8b) "球悬空"回归（2026-10-12 用户朋友报告，已修）：
+     *     支撑球被删掉（合成走的就是这条路）之后，压在它上面、已经睡着的球
+     *     必须被叫醒并落下来。
+     *     原理：enableSleeping 时 Matter **不对睡着的球做重力积分**，
+     *     而"邻居消失"不是碰撞事件，不会唤醒它 —— 必须主动 Sleeping.set(false)。 */
+    this.reset();
+    this.dead = false;
+    var cScale2 = G.PHYSICS.collisionScale || 1;
+    var rBase = G.THEME.tiers[1].radius * cScale2;
+    var rTop = G.THEME.tiers[0].radius * cScale2;
+    var sup = this.dropAt(1, G.DESIGN.w / 2);
+    G.Physics.Matter.Body.setPosition(sup, { x: G.DESIGN.w / 2, y: G.FIELD.floorY - rBase });
+    G.Physics.Matter.Body.setVelocity(sup, { x: 0, y: 0 });
+    var up = this.dropAt(0, G.DESIGN.w / 2);
+    G.Physics.Matter.Body.setPosition(up,
+      { x: G.DESIGN.w / 2, y: G.FIELD.floorY - rBase * 2 - rTop });
+    G.Physics.Matter.Body.setVelocity(up, { x: 0, y: 0 });
+    this.phys.syncSnapshot(up);
+    G.Physics.Matter.Sleeping.set(up, true);            // 上面的球先睡着
+    var upY0 = up.position.y;
+    this.phys.removeBall(sup);                          // 抽掉支撑（= 合成删球那条路）
+    ok('删掉支撑球会叫醒上面睡着的球', !up.isSleeping, 'isSleeping=' + up.isSleeping);
+    this.simulate(90);
+    ok('被叫醒的球会落回地面（不再悬空）', up.position.y > upY0 + 20,
+      'y ' + upY0.toFixed(1) + ' → ' + up.position.y.toFixed(1));
+
+    /* 8c) 反向保护：**别用"关掉休眠"来糊弄这个 bug** —— 静止的球仍然要能睡着 */
+    this.reset();
+    var lone = this.dropAt(2, G.DESIGN.w / 2);
+    G.Physics.Matter.Body.setPosition(lone,
+      { x: G.DESIGN.w / 2, y: G.FIELD.floorY - lone.circleRadius });
+    G.Physics.Matter.Body.setVelocity(lone, { x: 0, y: 0 });
+    this.simulate(200);
+    ok('静止球仍然会正常入睡（休眠没被这次修复废掉）', !!lone.isSleeping,
+      'isSleeping=' + lone.isSleeping);
+
     // 8) 重启清场
     this.restart();
     ok('重启清空场地', this.phys.balls().length === 0 && this.score === 0 && !this.dead);
