@@ -33,7 +33,9 @@ def sha(path):
 
 
 def lines(path):
-    with open(path, encoding='utf-8') as f:
+    # errors='replace'：文件万一被别的工具用 GBK 写坏，这里也只是数字不准，
+    # 不要让整个检查脚本崩掉 —— 关键结论是哈希比对。
+    with open(path, encoding='utf-8', errors='replace') as f:
         return sum(1 for _ in f)
 
 
