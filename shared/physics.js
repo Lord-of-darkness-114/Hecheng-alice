@@ -131,6 +131,40 @@
         var escaped = this.contain();
         if (escaped) this._lastContained = escaped;
       }
+      /* ★ 2026-10-12 审计：兜底捞出"悬空还睡着"的球。合成删球那条主路径已经在
+       * removeBall 里堵了，但极端堆型下仍会漏出极少数（根因未完全定位），
+       * 所以每 N 步扫一次：睡着 + 没碰地板 + 没贴墙 + 下方 reach 内没球 → 叫醒它。
+       * 误报的代价极低（只是让球晚 0.75 秒再睡），所以这层兜底很划算。 */
+      if (Pcfg.rescueFloat !== false) {
+        this._rescueTick = (this._rescueTick || 0) + 1;
+        if (this._rescueTick >= (Pcfg.rescueFloatSteps || 30)) {
+          this._rescueTick = 0;
+          this._lastRescued = this.rescueFloaters();
+        }
+      }
+    },
+
+    /* 把"悬空且睡着"的球叫醒（叫醒后它们会自己掉下来）。
+     * 返回本次叫醒的数量；诊断/回归用得上。 */
+    rescueFloaters: function () {
+      var arr = this.balls(), F = G.FIELD, n = 0, i, j;
+      for (i = 0; i < arr.length; i++) {
+        var b = arr[i];
+        if (!b.isSleeping) continue;
+        var r = b.circleRadius;
+        if (b.position.y + r >= F.floorY - 2) continue;                    // 在地板上
+        if (b.position.x - F.x - r < 3 || F.right - b.position.x - r < 3) continue;  // 贴侧墙
+        var ok = false;
+        for (j = 0; j < arr.length && !ok; j++) {
+          if (j === i) continue;
+          var o = arr[j];
+          var dx = o.position.x - b.position.x, dy = o.position.y - b.position.y;
+          var reach = r + o.circleRadius + 6;
+          if (dx * dx + dy * dy <= reach * reach && dy > -2) ok = true;
+        }
+        if (!ok) { this.Matter.Sleeping.set(b, false); n++; }
+      }
+      return n;
     },
 
     /* 把当前位置写进自有快照，供渲染插值使用。
