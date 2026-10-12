@@ -15,6 +15,13 @@ import os
 import shutil
 import sys
 
+# Windows 控制台/管道可能是 GBK，emoji 会直接抛 UnicodeEncodeError 把脚本搞崩。
+# 先兜住输出编码（显示可能仍是乱码，但脚本不会失败）。
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CUR = os.path.join(ROOT, 'shared', 'config.js')
 BAK = os.path.join(ROOT, 'shared', 'config.备份-当前.js')
