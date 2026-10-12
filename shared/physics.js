@@ -92,8 +92,32 @@
       return body;
     },
 
+    /* 删除一个球。
+     * ★ 2026-10-12：删球时必须**叫醒附近睡着的球** —— 否则压在它上面的球
+     *   （它已经睡着了，而 Matter 不对睡着的球做重力积分）会永远停在半空，
+     *   就是用户朋友报的"球悬空"bug。**合成删球走的就是这条路。** */
     removeBall: function (body) {
+      var px = body.position.x, py = body.position.y;
       this.Matter.Composite.remove(this.world, body);
+      this.wakeNear(px, py, (body.circleRadius || 0) + 4);
+      return this;
+    },
+
+    /* 叫醒 (x,y) 附近 reach 距离内的球。
+     * 休眠的球不受重力、也不会被"邻居消失"这种非碰撞事件唤醒，
+     * 所以凡是可能让它失去支撑的操作之后，都要主动叫一次。 */
+    wakeNear: function (x, y, reach) {
+      var arr = this.balls(), n = 0;
+      for (var i = 0; i < arr.length; i++) {
+        var b = arr[i];
+        if (!b.isSleeping) continue;
+        var dx = b.position.x - x, dy = b.position.y - y;
+        var rr = (reach || 0) + (b.circleRadius || 0);
+        if (dx * dx + dy * dy > rr * rr) continue;
+        this.Matter.Sleeping.set(b, false);
+        n++;
+      }
+      return n;
     },
 
     /* 一次固定步长的推进 */
@@ -274,6 +298,10 @@
     _shift: function (body, dx, dy) {
       body.position.x += dx; body.positionPrev.x += dx;
       body.position.y += dy; body.positionPrev.y += dy;
+      /* ★ 2026-10-12：被挪动过的球必须叫醒 —— 睡着的球不受重力，
+       * 万一这次挪动让它失去了支撑（分离修正把它顶起来、传送把它挪走），
+       * 它就会悬在半空。叫醒后它会自己重新落定（稳定 0.75 秒后又睡回去）。 */
+      if (body.isSleeping) this.Matter.Sleeping.set(body, false);
     },
 
     /* ---------------- 诊断：最大穿透量 ----------------
