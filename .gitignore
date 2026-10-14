@@ -39,3 +39,13 @@ docs/art/budget/
 
 # Python 缓存
 tools/_chrome_profile/
+
+
+# Android APK 打包（源码进仓库，工具链和产物不进）
+android/sdk/
+android/jdk/
+android/build/
+android/*.zip
+android/*.apk
+android/keystore.jks
+android/app/assets/www/
