@@ -49,3 +49,7 @@ android/*.zip
 android/*.apk
 android/keystore.jks
 android/app/assets/www/
+
+# APK 一律不上传（2026-10-14 用户明确要求：只留本地）
+*.apk
+*.aab
