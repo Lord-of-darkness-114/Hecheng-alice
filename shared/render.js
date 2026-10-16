@@ -562,17 +562,29 @@
     /* ---------------- 小胶囊按钮（版本切换 / 返回 共用） ----------------
      * 只负责画；命中区由调用方组装进 this.hits（带约 12px 宽容度，手机手指粗）。
      * ------------------------------------------------------------------ */
-    _chip: function (c, x, y, w, h, label, active, fontPx) {
+    _chip: function (c, x, y, w, h, label, active, fontPx, style) {
       var C = G.THEME.colors;
       c.beginPath();
-      this.roundRect(c, x, y, w, h, 6);
-      c.fillStyle = active ? 'rgba(201,162,39,.22)' : 'rgba(0,0,0,.30)';
-      c.fill();
-      c.lineWidth = active ? 1.6 : 1;
-      c.strokeStyle = active ? C.gold : 'rgba(140,130,102,.55)';
-      c.stroke();
-      c.font = (active ? '700 ' : '') + (fontPx || 15) + 'px ' + G.THEME.fontFamily;
-      c.fillStyle = active ? C.goldBright : C.dim;
+      this.roundRect(c, x, y, w, h, (style && style.radius) || 6);
+      if (style) {
+        /* 独立外观（2026-10-16 用户测试：纯白打底 50%、无渐变、纯红字）——
+         * 只给"版本切换胶囊"用，不动"返回"按钮 */
+        c.fillStyle = style.bg;
+        c.fill();
+        c.lineWidth = active ? style.activeBorderW : style.idleBorderW;
+        c.strokeStyle = active ? style.activeBorder : style.idleBorder;
+        c.stroke();
+        c.font = (active ? '700 ' : '') + (fontPx || 15) + 'px ' + G.THEME.fontFamily;
+        c.fillStyle = style.text;
+      } else {
+        c.fillStyle = active ? 'rgba(201,162,39,.22)' : 'rgba(0,0,0,.30)';
+        c.fill();
+        c.lineWidth = active ? 1.6 : 1;
+        c.strokeStyle = active ? C.gold : 'rgba(140,130,102,.55)';
+        c.stroke();
+        c.font = (active ? '700 ' : '') + (fontPx || 15) + 'px ' + G.THEME.fontFamily;
+        c.fillStyle = active ? C.goldBright : C.dim;
+      }
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.fillText(label, x + w / 2, y + h / 2 + 1);
@@ -583,7 +595,9 @@
     versionRects: function () {
       if (!G.NAME_VERSION_ORDER) return [];
       var out = [];
-      var x = 20, y = 86, w = 76, h = 26, gap = 6;
+      var cs = (G.TITLE && G.TITLE.chip) || {};
+      var x = (cs.x != null) ? cs.x : 20, y = (cs.y != null) ? cs.y : 86;
+      var w = cs.w || 76, h = cs.h || 26, gap = (cs.gap != null) ? cs.gap : 6;
       for (var i = 0; i < G.NAME_VERSION_ORDER.length; i++) {
         var key = G.NAME_VERSION_ORDER[i];
         var set = G.NAME_SETS[key];
@@ -602,9 +616,10 @@
      * 因为开始界面还要往里加"开始游戏"、游戏里还要加"返回"） */
     _drawVersionPicker: function (c) {
       var rects = this.versionRects();
+      var cst = (G.TITLE && G.TITLE.chip) || null;
       for (var i = 0; i < rects.length; i++) {
         var r = rects[i];
-        this._chip(c, r.x, r.y, r.w, r.h, r.label, r.active);
+        this._chip(c, r.x, r.y, r.w, r.h, r.label, r.active, cst && cst.fontPx, cst);
       }
       c.textAlign = 'center';
       return rects;
@@ -647,11 +662,15 @@
       c.fillStyle = vg;
       c.fillRect(0, 0, D.w, D.h);
       // 顶部一束烛光（和游戏内那套语汇一致）
-      var gl = c.createRadialGradient(D.w / 2, 40, 10, D.w / 2, 40, D.h * 0.5);
-      gl.addColorStop(0, 'rgba(201,162,39,.14)');
-      gl.addColorStop(1, 'rgba(201,162,39,0)');
-      c.fillStyle = gl;
-      c.fillRect(0, 0, D.w, D.h);
+      // ★ 2026-10-16 用户测试：想看看去掉是什么效果 → 用 T.topGlowAlpha 控制（0 = 不画）
+      var tg = (T.topGlowAlpha != null) ? T.topGlowAlpha : 0.14;
+      if (tg > 0) {
+        var gl = c.createRadialGradient(D.w / 2, 40, 10, D.w / 2, 40, D.h * 0.5);
+        gl.addColorStop(0, 'rgba(201,162,39,' + tg + ')');
+        gl.addColorStop(1, 'rgba(201,162,39,0)');
+        c.fillStyle = gl;
+        c.fillRect(0, 0, D.w, D.h);
+      }
 
       c.textAlign = 'center';
       // —— 主标题（副标题留空就不画）——
