@@ -628,9 +628,12 @@
     /* 游戏内右上角"返回"胶囊（回到开始界面），和版本胶囊同一套样式。
      * 2026-10-11 用户要求"稍微调大一点"：76×26 → 96×32，字号 15 → 18。 */
     backRect: function () {
-      var w = 96, h = 32, x = G.DESIGN.w - 22 - w, y = 84;
+      var bk = (G.TITLE && G.TITLE.back) || {};
+      var w = bk.w || 96, h = bk.h || 32;
+      var x = G.DESIGN.w - ((bk.right != null) ? bk.right : 22) - w;
+      var y = (bk.y != null) ? bk.y : 84;
       return {
-        action: 'back', label: '返回', active: false, fontPx: 18,
+        action: 'back', label: '返回', active: false, fontPx: bk.fontPx || 18,
         x: x, y: y, w: w, h: h,
         hitX: x - 12, hitY: y - 14, hitW: w + 24, hitH: h + 28
       };
