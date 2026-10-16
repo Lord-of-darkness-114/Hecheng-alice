@@ -716,10 +716,13 @@
       var blood = C.blood, bloodBright = '#e8452c', bloodDeep = '#3d0709';
       var i;
 
-      // 1) 底色：暗血红渐变 + 随呼吸的红色外发光
+      // 1) 底色：暗血红渐变（+ 可选的随呼吸红色外发光，T.buttonGlow = 0 就关掉发光）
       c.save();
-      c.shadowColor = 'rgba(192,57,43,' + (0.34 + pulse * 0.38).toFixed(3) + ')';
-      c.shadowBlur = 26 + pulse * 20;
+      var bgk = (T.buttonGlow != null) ? T.buttonGlow : 1;
+      if (bgk > 0) {
+        c.shadowColor = 'rgba(192,57,43,' + ((0.34 + pulse * 0.38) * bgk).toFixed(3) + ')';
+        c.shadowBlur = (26 + pulse * 20) * bgk;
+      }
       var bgGrad = c.createLinearGradient(0, by, 0, by + b.h);
       bgGrad.addColorStop(0, 'rgba(104,16,18,.97)');
       bgGrad.addColorStop(0.55, 'rgba(62,9,13,.97)');
@@ -1271,7 +1274,9 @@
       // 命名版本切换（普通/地狱）+ 右上角"返回"（回到开始界面）
       var picks = this._drawVersionPicker(c);
       var back = this.backRect();
-      this._chip(c, back.x, back.y, back.w, back.h, back.label, false, back.fontPx);
+      // "返回"用和版本胶囊同一套样式（2026-10-16 用户要求）
+      this._chip(c, back.x, back.y, back.w, back.h, back.label, false, back.fontPx,
+                 (G.TITLE && G.TITLE.chip) || null);
       this.hits = picks.concat([back]);
 
       c.shadowColor = 'transparent';
