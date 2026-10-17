@@ -197,7 +197,29 @@
     /* 按钮字体：**草书**（网页字体，@font-face 定义在 web/index.html）
      * → 华文行楷 → 华文隶书 → 隶书 → 楷体 → 系统衬线。
      * 草书字体只裁了 11 个字（7.5KB），**改按钮文字要重新裁剪**，见交接文档。 */
-    labelFont: 'BSLabel, STXingkai, STLiti, LiSu, KaiTi, serif'
+    labelFont: 'BSLabel, STXingkai, STLiti, LiSu, KaiTi, serif',
+    /* ---- 版本切换胶囊（2026-10-16 用户测试版）----
+     * 用户反馈：原来太小、配色不好看 → 尺寸放大一圈；
+     * **纯白打底、无渐变、50% 不透明、文字纯红**。
+     * 想还原旧外观：把 chip 整段删掉即可（render.js 里都有默认值兜底）。
+     * ⚠️ 这套样式现在**同时作用于**"正常版 / 地狱版"和游戏内右上角的"返回"。 */
+    chip: {
+      x: 20, y: 86, w: 146, h: 44, gap: 8,  // 2026-10-16 第二次放大：76×26 → 96×34 → 146×44
+      fontPx: 22, radius: 10,               // 字号 15 → 18 → 22（要容下 5 个字的"地狱笑话版"）
+      bg: 'rgba(255,255,255,.5)',           // 纯白打底 50%（无渐变）
+      text: '#ff0000',                      // 文字：纯红
+      activeBorder: '#ff0000', activeBorderW: 2,
+      idleBorder: 'rgba(120,120,120,.55)', idleBorderW: 1
+    },
+    /* 游戏内右上角"返回"胶囊的尺寸（配色/边框复用上面 chip 那套）。
+     * 2026-10-16 第二次放大。 */
+    back: { w: 118, h: 44, fontPx: 22, right: 22, y: 82 },
+    /* 标题上方那束金色烛光（标题上方的黄色发光）：0 = 关掉。
+     * 2026-10-16 用户想试试去掉的效果，所以先关；想恢复填 0.14。 */
+    topGlowAlpha: 0,
+    /* "开始游戏"按钮那圈**随呼吸的红外发光**：0 = 关掉（渐变底保留，不受影响）。
+     * 2026-10-16 用户要求："开始游戏"把发光去掉、但不要动渐变。 */
+    buttonGlow: 0
   };
 
   /* -------- 素材路径（贴图到位后只改这里） -------- */
@@ -321,7 +343,7 @@
       names: ['艾露玛', '古兹', '维多利亚', '伊丽莎白', '多萝茜', '蕾克', '库嘻嘻', '爱丽丝']
     },
     hell: {
-      label: '地狱版',
+      label: '地狱笑话版',
       names: ['吊死鬼', '手撕鸡', '禁止掉头', '褒姒', '肚包肉', '永远二十', '库嘻嘻', '爱丽丝']
     }
   };
@@ -556,7 +578,7 @@
           id: 'hell_tier_' + idx,
           ver: 'hell',
           name: G.ACHV_HELL_TIER_NAMES[idx] || ('（地狱·待命名·首合' + idx + '阶）'),
-          desc: '在地狱版第一次合成出{' + idx + '}',
+          desc: '在地狱笑话版第一次合成出{' + idx + '}',
           icon: icon,
           test: function (s) { return s.tierMergesHell[idx] >= 1; }
         });
@@ -617,7 +639,7 @@
         test: function (s) { return s.aliceCount >= 5; },
         prog: function (s) { return Math.min(s.aliceCount, 5) + '/5'; } },
       /* 2026-10-11 追加：用上"命名版本"和"单局收集"两条数据 */
-      { id: 'hell_world', name: '另一个世界', desc: '在地狱版玩一局', icon: 'skull',
+      { id: 'hell_world', name: '另一个世界', desc: '在地狱笑话版玩一局', icon: 'skull',
         test: function (s) { return s.hellGames >= 1; } },
       { id: 'all_tiers', name: '全图鉴', desc: '单局内把 7 个角色都合出来一次', icon: 'key',
         test: function (s) { return s.allTiersInOneGame >= 1; } }
